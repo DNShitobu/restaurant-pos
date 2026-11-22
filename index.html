@@ -1,0 +1,2070 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Restaurant POS</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#1c1c1e;--bg2:#242426;--bg3:#2c2c2e;--bg4:#3a3a3c;--bg5:#48484a;
+  --amber:#f59e0b;--amber2:#d97706;--amber3:#fbbf24;--amber-glow:rgba(245,158,11,0.15);
+  --text:#f5f5f7;--text2:#aeaeb2;--text3:#636366;
+  --green:#34c759;--red:#ff3b30;--blue:#0a84ff;--purple:#bf5af2;--teal:#5ac8fa;
+  --border:#3a3a3c;--border2:#48484a;
+  --shadow:0 8px 32px rgba(0,0,0,0.5);
+  --radius:12px;--radius-sm:8px;--radius-xs:6px;
+}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;display:flex;flex-direction:column}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bg5);border-radius:3px}
+
+/* TOP BAR */
+#topbar{
+  background:var(--bg2);border-bottom:1px solid var(--border);
+  padding:0 20px;height:54px;display:flex;align-items:center;
+  justify-content:space-between;flex-shrink:0;z-index:100;
+}
+.tb-left{display:flex;align-items:center;gap:14px}
+#rest-name-display{font-size:19px;font-weight:700;color:var(--amber);letter-spacing:-0.3px}
+.shift-badge{
+  background:var(--bg3);border:1px solid var(--border2);
+  padding:3px 10px;border-radius:20px;font-size:11px;color:var(--text2);
+}
+.tb-right{display:flex;align-items:center;gap:20px}
+#clock-wrap{text-align:right}
+#clock-time{font-size:18px;font-weight:600;color:var(--amber);line-height:1}
+#clock-date{font-size:11px;color:var(--text2);margin-top:2px}
+#cashier-display{font-size:12px;color:var(--text2)}
+#cashier-display span{color:var(--text);font-weight:500}
+
+/* NAV */
+#nav{
+  background:var(--bg2);border-bottom:1px solid var(--border);
+  display:flex;padding:0 16px;flex-shrink:0;overflow-x:auto;
+}
+.nav-btn{
+  padding:10px 16px;border:none;background:none;color:var(--text2);
+  cursor:pointer;font-size:13px;font-weight:500;
+  border-bottom:2px solid transparent;transition:all 0.2s;white-space:nowrap;
+}
+.nav-btn:hover{color:var(--text)}
+.nav-btn.active{color:var(--amber);border-bottom-color:var(--amber)}
+
+/* MAIN */
+#main{display:flex;flex:1;overflow:hidden}
+
+/* CONTENT */
+#content{flex:1;overflow-y:auto;padding:20px;background:var(--bg)}
+.view{display:none}
+.view.active{display:block;animation:fadeIn 0.2s ease}
+
+/* ORDER PANEL */
+#order-panel{
+  width:380px;background:var(--bg2);border-left:1px solid var(--border);
+  display:flex;flex-direction:column;overflow:hidden;flex-shrink:0;
+}
+
+@keyframes fadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideIn{from{opacity:0;transform:translateX(8px)}to{opacity:1;transform:translateX(0)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.6}}
+
+/* === FLOOR PLAN === */
+.floor-toolbar{display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap}
+.floor-legend{display:flex;gap:18px;margin-left:auto;flex-wrap:wrap}
+.legend-item{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text2)}
+.legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.ld-avail{background:var(--green)}
+.ld-occ{background:var(--amber)}
+.ld-res{background:var(--blue)}
+
+.floor-canvas-wrap{width:100%;overflow-x:auto;overflow-y:visible;padding-bottom:8px}
+.floor-canvas{
+  position:relative;width:1200px;height:700px;
+  background:linear-gradient(160deg,#161210 0%,#1b1a16 50%,#141612 100%);
+  border-radius:12px;border:1px solid var(--border2);overflow:hidden;
+}
+.floor-section{position:absolute;border:1px solid;border-radius:3px;overflow:hidden}
+.floor-section-label{
+  position:absolute;bottom:8px;left:12px;font-size:11px;font-weight:700;
+  text-transform:uppercase;letter-spacing:0.8px;opacity:0.4;pointer-events:none;
+}
+.floor-section.main{background:rgba(180,140,80,0.07);border-color:rgba(180,140,80,0.2)}
+.floor-section.bar{background:rgba(80,40,10,0.15);border-color:rgba(140,80,20,0.3)}
+.floor-section.patio{background:rgba(50,100,50,0.08);border-color:rgba(80,140,80,0.2)}
+.floor-section.private{background:rgba(100,70,160,0.1);border-color:rgba(140,100,200,0.3)}
+.floor-table{
+  position:absolute;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;cursor:pointer;border:2px solid;transition:all 0.2s;
+  user-select:none;transform:translate(-50%,-50%);
+}
+.floor-table.round{width:52px;height:52px;border-radius:50%}
+.floor-table.sm{width:78px;height:48px;border-radius:6px}
+.floor-table.lg{width:112px;height:52px;border-radius:6px}
+.floor-table.xl{width:144px;height:56px;border-radius:6px}
+.floor-table:hover{transform:translate(-50%,-50%) scale(1.1);z-index:10;box-shadow:0 4px 20px rgba(0,0,0,0.6)}
+.floor-table.selected{transform:translate(-50%,-50%) scale(1.1);z-index:10;box-shadow:0 0 0 3px rgba(245,158,11,0.6)!important}
+.floor-table.available{background:rgba(52,199,89,0.1);border-color:var(--green)}
+.floor-table.occupied{background:rgba(245,158,11,0.15);border-color:var(--amber)}
+.floor-table.reserved{background:rgba(10,132,255,0.1);border-color:var(--blue)}
+.ft-num{font-size:13px;font-weight:700;line-height:1;color:var(--text)}
+.ft-cap{font-size:9px;color:var(--text2);margin-top:2px;line-height:1}
+.ft-badge{
+  position:absolute;top:-7px;right:-7px;background:var(--amber);color:#000;
+  width:18px;height:18px;border-radius:50%;font-size:10px;font-weight:700;
+  display:flex;align-items:center;justify-content:center;z-index:5;
+}
+.floor-bar-counter{
+  position:absolute;background:rgba(100,60,20,0.4);border:1px solid rgba(160,100,40,0.5);
+  border-radius:4px;display:flex;align-items:center;justify-content:center;
+  font-size:10px;color:rgba(255,255,255,0.3);text-transform:uppercase;letter-spacing:1px;
+  pointer-events:none;
+}
+.floor-marker{
+  position:absolute;font-size:10px;color:rgba(255,255,255,0.3);
+  background:rgba(0,0,0,0.3);padding:3px 8px;border-radius:4px;
+  pointer-events:none;white-space:nowrap;
+}
+.floor-plant{position:absolute;font-size:18px;opacity:0.4;pointer-events:none}
+.floor-walkway{position:absolute;background:rgba(255,255,255,0.025);pointer-events:none}
+
+/* CONTEXT MENU */
+#ctx-menu{
+  position:fixed;background:var(--bg3);border:1px solid var(--border2);
+  border-radius:var(--radius-sm);padding:4px;z-index:2000;min-width:170px;
+  box-shadow:var(--shadow);display:none;
+}
+.ctx-item{
+  padding:8px 14px;cursor:pointer;border-radius:5px;font-size:13px;
+  transition:background 0.15s;display:flex;align-items:center;gap:8px;
+}
+.ctx-item:hover{background:var(--bg4)}
+.ctx-item.danger{color:var(--red)}
+
+/* === MENU VIEW === */
+.menu-layout{display:flex;gap:0;height:calc(100vh - 130px)}
+.menu-left{flex:1;display:flex;flex-direction:column;overflow:hidden;padding-right:4px}
+.menu-search-bar{display:flex;gap:8px;margin-bottom:12px}
+.menu-search{
+  flex:1;background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);
+  padding:8px 12px;color:var(--text);font-size:13px;
+}
+.menu-search:focus{outline:none;border-color:var(--amber)}
+.cat-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.cat-btn{
+  padding:6px 14px;border-radius:20px;border:1px solid var(--border);
+  background:var(--bg3);color:var(--text2);cursor:pointer;font-size:12px;transition:all 0.2s;
+}
+.cat-btn.active{background:var(--amber);color:#000;border-color:var(--amber);font-weight:600}
+.menu-items-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(185px,1fr));
+  gap:10px;overflow-y:auto;flex:1;padding-right:2px;
+}
+.menu-card{
+  background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);
+  padding:13px;cursor:pointer;transition:all 0.2s;position:relative;
+  display:flex;flex-direction:column;
+}
+.menu-card:hover:not(.unavail){border-color:var(--amber);transform:translateY(-1px);box-shadow:0 4px 12px rgba(0,0,0,0.3)}
+.menu-card.unavail{opacity:0.38;cursor:default}
+.veg-dot{
+  position:absolute;top:10px;right:10px;width:16px;height:16px;
+  border-radius:3px;border:2px solid;display:flex;align-items:center;justify-content:center;
+}
+.veg-dot.veg{border-color:var(--green)}
+.veg-dot.nveg{border-color:var(--red)}
+.veg-dot::after{content:'';width:7px;height:7px;border-radius:50%}
+.veg-dot.veg::after{background:var(--green)}
+.veg-dot.nveg::after{background:var(--red)}
+.mc-name{font-size:13px;font-weight:600;margin-bottom:3px;padding-right:20px;line-height:1.3}
+.mc-desc{font-size:11px;color:var(--text2);margin-bottom:8px;line-height:1.4;flex:1}
+.mc-footer{display:flex;align-items:center;justify-content:space-between;margin-top:auto}
+.mc-price{font-size:15px;font-weight:700;color:var(--amber)}
+.mc-toggle{
+  font-size:10px;padding:2px 7px;border-radius:4px;border:1px solid var(--border);
+  background:none;color:var(--text2);cursor:pointer;
+}
+.mc-toggle.unavail-active{border-color:var(--red);color:var(--red)}
+
+/* === ORDER PANEL === */
+.op-header{
+  padding:14px 14px 10px;border-bottom:1px solid var(--border);background:var(--bg3);flex-shrink:0;
+}
+.op-table-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.op-table-title{font-size:16px;font-weight:700}
+.split-tabs{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:8px}
+.split-tab{
+  padding:3px 10px;border-radius:5px;border:1px solid var(--border);
+  background:var(--bg4);color:var(--text2);font-size:11px;cursor:pointer;transition:all 0.15s;
+}
+.split-tab.active{background:var(--amber);color:#000;border-color:var(--amber);font-weight:600}
+.split-tab-add{padding:3px 8px;border-radius:5px;border:1px dashed var(--border2);background:none;color:var(--text3);font-size:11px;cursor:pointer}
+.split-tab-add:hover{border-color:var(--amber);color:var(--amber)}
+.op-waiter-row{display:flex;align-items:center;gap:6px}
+.op-waiter-label{font-size:11px;color:var(--text2)}
+.op-waiter-input{
+  flex:1;background:var(--bg4);border:1px solid var(--border);border-radius:5px;
+  padding:4px 8px;color:var(--text);font-size:12px;
+}
+.op-waiter-input:focus{outline:none;border-color:var(--amber)}
+.op-items{flex:1;overflow-y:auto;padding:10px}
+.op-item{background:var(--bg3);border-radius:var(--radius-sm);padding:10px;margin-bottom:8px;animation:slideIn 0.2s ease}
+.op-item-row{display:flex;align-items:center;gap:6px}
+.op-item-name{flex:1;font-size:13px;font-weight:500;line-height:1.3}
+.qty-ctrl{display:flex;align-items:center;gap:5px}
+.qty-btn{
+  width:24px;height:24px;border-radius:50%;border:1px solid var(--border);
+  background:var(--bg4);color:var(--text);cursor:pointer;font-size:15px;
+  display:flex;align-items:center;justify-content:center;transition:all 0.15s;
+  line-height:1;flex-shrink:0;
+}
+.qty-btn:hover{background:var(--amber);color:#000;border-color:var(--amber)}
+.qty-num{font-size:14px;font-weight:600;min-width:22px;text-align:center}
+.item-line-price{font-size:13px;font-weight:600;color:var(--amber);min-width:58px;text-align:right}
+.rm-btn{background:none;border:none;color:var(--text3);cursor:pointer;font-size:18px;padding:0 2px;transition:color 0.15s}
+.rm-btn:hover{color:var(--red)}
+.item-note-input{
+  margin-top:6px;background:var(--bg4);border:1px solid var(--border);
+  border-radius:4px;padding:4px 8px;color:var(--text);font-size:11px;width:100%;
+}
+.item-note-input:focus{outline:none;border-color:var(--amber3)}
+.item-note-input::placeholder{color:var(--text3)}
+
+.op-empty{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  height:100%;color:var(--text2);text-align:center;gap:10px;
+}
+.op-empty-icon{font-size:42px;opacity:0.2}
+
+.op-summary{padding:10px 14px;border-top:1px solid var(--border);background:var(--bg3);flex-shrink:0}
+.sum-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:5px;font-size:13px}
+.sum-label{color:var(--text2)}
+.sum-val{font-weight:500}
+.sum-row.total{
+  font-size:15px;font-weight:700;color:var(--amber);
+  border-top:1px solid var(--border);padding-top:7px;margin-top:3px;
+}
+.sum-input{
+  background:var(--bg4);border:1px solid var(--border);border-radius:4px;
+  padding:2px 7px;color:var(--text);font-size:12px;width:62px;text-align:right;
+}
+.sum-input:focus{outline:none;border-color:var(--amber)}
+.disc-wrap{display:flex;align-items:center;gap:4px}
+.disc-toggle-btn{
+  padding:2px 7px;border-radius:4px;border:1px solid var(--border);
+  background:none;color:var(--text2);font-size:11px;cursor:pointer;transition:all 0.15s;
+}
+.disc-toggle-btn.on{background:var(--amber);color:#000;border-color:var(--amber)}
+
+.op-actions{padding:10px 14px;border-top:1px solid var(--border);display:flex;gap:6px;flex-shrink:0}
+
+/* BUTTONS */
+.btn{
+  padding:8px 14px;border-radius:var(--radius-sm);border:none;cursor:pointer;
+  font-size:13px;font-weight:600;transition:all 0.2s;display:inline-flex;align-items:center;gap:5px;
+}
+.btn-primary{background:var(--amber);color:#000}
+.btn-primary:hover{background:var(--amber3)}
+.btn-secondary{background:var(--bg4);color:var(--text);border:1px solid var(--border)}
+.btn-secondary:hover{border-color:var(--amber);color:var(--amber)}
+.btn-danger{background:var(--red);color:#fff}
+.btn-danger:hover{opacity:0.85}
+.btn-blue{background:var(--blue);color:#fff}
+.btn-green{background:var(--green);color:#000;font-weight:700}
+.btn-green:hover{opacity:0.85}
+.btn-sm{padding:5px 10px;font-size:12px}
+.btn:disabled{opacity:0.4;cursor:not-allowed}
+
+/* === MODALS === */
+.overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:500;
+  display:flex;align-items:center;justify-content:center;backdrop-filter:blur(2px);
+}
+.overlay.hidden{display:none}
+.modal{
+  background:var(--bg2);border:1px solid var(--border2);border-radius:16px;
+  padding:22px;position:relative;max-height:92vh;overflow-y:auto;
+  box-shadow:0 20px 60px rgba(0,0,0,0.6);animation:fadeIn 0.2s ease;
+}
+.modal-sm{width:360px}
+.modal-md{width:480px}
+.modal-lg{width:580px}
+.modal-xl{width:700px}
+.modal-title{font-size:17px;font-weight:700;margin-bottom:18px;color:var(--amber)}
+.modal-close{
+  position:absolute;top:14px;right:14px;background:none;border:none;
+  color:var(--text2);font-size:20px;cursor:pointer;line-height:1;
+}
+.modal-close:hover{color:var(--text)}
+
+/* CHECKOUT */
+.pay-methods{display:flex;gap:8px;margin-bottom:16px}
+.pay-btn{
+  flex:1;padding:10px 8px;border-radius:var(--radius-sm);border:1px solid var(--border);
+  background:var(--bg3);color:var(--text2);cursor:pointer;font-size:13px;
+  text-align:center;transition:all 0.2s;
+}
+.pay-btn.active{border-color:var(--amber);color:var(--amber);background:var(--amber-glow);font-weight:600}
+.checkout-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;font-size:14px}
+.checkout-row.total{font-size:17px;font-weight:700;color:var(--amber);border-top:1px solid var(--border);padding-top:11px;margin-top:6px}
+.co-input{
+  background:var(--bg3);border:1px solid var(--border);border-radius:5px;
+  padding:6px 10px;color:var(--text);font-size:14px;width:130px;text-align:right;
+}
+.co-input:focus{outline:none;border-color:var(--amber)}
+.change-box{
+  background:rgba(52,199,89,0.15);border:1px solid var(--green);
+  border-radius:var(--radius-sm);padding:10px 14px;text-align:center;
+  font-weight:700;font-size:16px;color:var(--green);margin-top:8px;
+}
+.split-pay-row{
+  display:flex;align-items:center;gap:8px;margin-bottom:7px;
+  background:var(--bg3);border-radius:var(--radius-sm);padding:8px 12px;
+}
+.split-pay-label{flex:1;font-size:13px}
+.split-pay-input{
+  background:var(--bg4);border:1px solid var(--border);border-radius:5px;
+  padding:5px 8px;color:var(--text);font-size:13px;width:110px;text-align:right;
+}
+.split-pay-input:focus{outline:none;border-color:var(--amber)}
+.split-remain{font-size:12px;color:var(--text2);text-align:right;margin-bottom:10px}
+.split-remain.ok{color:var(--green)}
+.split-remain.over{color:var(--red)}
+
+/* KOT */
+.kot-box{
+  background:#fff;color:#111;font-family:'Courier New',monospace;
+  border-radius:var(--radius-sm);padding:20px;font-size:13px;line-height:1.7;
+}
+.kot-box hr{border:none;border-top:1px dashed #999;margin:6px 0}
+.kot-title{font-size:16px;font-weight:700;text-align:center;margin-bottom:4px}
+.kot-sub{font-size:11px;text-align:center;color:#555;margin-bottom:8px}
+.kot-item-row{display:flex;justify-content:space-between}
+.kot-item-name{flex:1}
+.kot-item-qty{font-weight:700;width:30px;text-align:right}
+.kot-note{font-size:11px;color:#666;padding-left:10px}
+
+/* RECEIPT */
+.receipt-box{
+  background:#fff;color:#111;font-family:'Courier New',monospace;
+  border-radius:var(--radius-sm);padding:20px;font-size:12px;line-height:1.7;
+}
+.receipt-box hr{border:none;border-top:1px dashed #999;margin:6px 0}
+.receipt-title{font-size:16px;font-weight:700;text-align:center}
+.receipt-sub{font-size:11px;text-align:center;color:#555}
+.receipt-row{display:flex;justify-content:space-between}
+.receipt-row-right{text-align:right}
+.receipt-total{font-size:14px;font-weight:700}
+
+/* HISTORY */
+.history-header{display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.history-filter-btn{
+  padding:5px 13px;border-radius:20px;border:1px solid var(--border);
+  background:var(--bg3);color:var(--text2);font-size:12px;cursor:pointer;transition:all 0.2s;
+}
+.history-filter-btn.active{background:var(--amber);color:#000;border-color:var(--amber);font-weight:600}
+.htable{width:100%;border-collapse:collapse}
+.htable th,.htable td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--border);font-size:13px}
+.htable th{color:var(--text2);font-weight:500;background:var(--bg3);font-size:12px}
+.htable tr:hover td{background:rgba(255,255,255,0.03)}
+.pay-chip{
+  padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;
+}
+.pay-chip.cash{background:rgba(52,199,89,0.2);color:var(--green)}
+.pay-chip.card{background:rgba(10,132,255,0.2);color:var(--blue)}
+.pay-chip.upi{background:rgba(191,90,242,0.2);color:var(--purple)}
+.pay-chip.split{background:rgba(245,158,11,0.2);color:var(--amber)}
+
+/* SUMMARY */
+.sum-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;margin-bottom:22px}
+.sum-card{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:18px}
+.sum-card-label{font-size:11px;color:var(--text2);text-transform:uppercase;letter-spacing:0.7px;margin-bottom:7px}
+.sum-card-val{font-size:26px;font-weight:700;color:var(--amber);line-height:1}
+.sum-card-sub{font-size:12px;color:var(--text2);margin-top:5px}
+.pay-breakdown{background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius);padding:18px}
+.pay-bd-title{font-size:14px;font-weight:600;margin-bottom:14px}
+.pay-bd-row{display:flex;justify-content:space-between;align-items:center;padding:6px 0;font-size:13px;border-bottom:1px solid var(--border)}
+.pay-bd-row:last-child{border:none}
+.pay-bd-bar-wrap{flex:1;height:6px;background:var(--bg4);border-radius:3px;margin:0 12px}
+.pay-bd-bar{height:100%;border-radius:3px;transition:width 0.5s ease}
+
+/* SETTINGS */
+.settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media(max-width:600px){.settings-grid{grid-template-columns:1fr}}
+.form-group{display:flex;flex-direction:column;gap:5px}
+.form-label{font-size:12px;color:var(--text2);font-weight:500}
+.form-input{
+  background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);
+  padding:8px 11px;color:var(--text);font-size:13px;width:100%;
+}
+.form-input:focus{outline:none;border-color:var(--amber)}
+.toggle-row{
+  display:flex;align-items:center;justify-content:space-between;
+  background:var(--bg3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 13px;
+}
+.toggle-label{font-size:13px}
+.tswitch{
+  width:42px;height:23px;background:var(--bg5);border-radius:12px;
+  position:relative;cursor:pointer;transition:background 0.2s;flex-shrink:0;
+}
+.tswitch.on{background:var(--amber)}
+.tswitch::after{
+  content:'';position:absolute;width:17px;height:17px;border-radius:50%;
+  background:#fff;top:3px;left:3px;transition:left 0.2s;
+}
+.tswitch.on::after{left:22px}
+
+/* NOTIFICATION */
+#notif{
+  position:fixed;bottom:22px;right:22px;background:var(--bg3);
+  border:1px solid var(--border2);border-radius:var(--radius-sm);
+  padding:11px 18px;font-size:13px;z-index:3000;
+  box-shadow:var(--shadow);display:none;
+}
+#notif.show{display:block;animation:fadeIn 0.25s ease}
+#notif.success{border-color:var(--green)}
+#notif.error{border-color:var(--red)}
+#notif.info{border-color:var(--amber)}
+
+/* PRINT */
+@media print{
+  body>*{display:none!important}
+  #print-area{display:block!important;font-family:'Courier New',monospace;font-size:12px;color:#000;padding:0;margin:0}
+}
+#print-area{display:none}
+
+/* Divider */
+.section-title{font-size:14px;font-weight:600;color:var(--text2);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px}
+.divider{border:none;border-top:1px solid var(--border);margin:14px 0}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div id="topbar">
+  <div class="tb-left">
+    <div id="rest-name-display">The Golden Fork</div>
+    <div class="shift-badge" id="shift-display">Morning Shift</div>
+  </div>
+  <div class="tb-right">
+    <div id="cashier-display">Cashier: <span id="cashier-name-display">Admin</span></div>
+    <div id="clock-wrap">
+      <div id="clock-time">00:00:00</div>
+      <div id="clock-date">—</div>
+    </div>
+  </div>
+</div>
+
+<!-- NAV -->
+<div id="nav">
+  <button class="nav-btn active" onclick="showView('floor')" data-view="floor">🪑 Floor Plan</button>
+  <button class="nav-btn" onclick="showView('menu')" data-view="menu">🍽 Menu</button>
+  <button class="nav-btn" onclick="showView('manage')" data-view="manage">📝 Menu Mgmt</button>
+  <button class="nav-btn" onclick="showView('history')" data-view="history">📋 History</button>
+  <button class="nav-btn" onclick="showView('summary')" data-view="summary">📊 Summary</button>
+  <button class="nav-btn" onclick="showView('settings')" data-view="settings">⚙️ Settings</button>
+</div>
+
+<!-- MAIN -->
+<div id="main">
+  <div id="content">
+
+    <!-- FLOOR PLAN -->
+    <div id="view-floor" class="view active">
+      <div class="floor-toolbar">
+        <div class="section-title" style="margin:0">Floor Plan</div>
+        <div class="floor-legend">
+          <div class="legend-item"><div class="legend-dot ld-avail"></div>Available</div>
+          <div class="legend-item"><div class="legend-dot ld-occ"></div>Occupied</div>
+          <div class="legend-item"><div class="legend-dot ld-res"></div>Reserved</div>
+        </div>
+      </div>
+      <div id="floor-canvas-wrap" class="floor-canvas-wrap"></div>
+    </div>
+
+    <!-- MENU -->
+    <div id="view-menu" class="view">
+      <div class="menu-search-bar">
+        <input class="menu-search" id="menu-search" placeholder="Search items…" oninput="renderMenuItems()">
+      </div>
+      <div class="cat-tabs" id="cat-tabs"></div>
+      <div id="menu-items-grid" class="menu-items-grid"></div>
+    </div>
+
+    <!-- HISTORY -->
+    <div id="view-history" class="view">
+      <div class="history-header">
+        <div class="section-title" style="margin:0">Order History</div>
+        <button class="history-filter-btn active" onclick="filterHistory('all',this)">All</button>
+        <button class="history-filter-btn" onclick="filterHistory('cash',this)">Cash</button>
+        <button class="history-filter-btn" onclick="filterHistory('card',this)">Card</button>
+        <button class="history-filter-btn" onclick="filterHistory('upi',this)">UPI</button>
+        <button class="history-filter-btn" onclick="filterHistory('split',this)">Split</button>
+      </div>
+      <div id="history-table-wrap"></div>
+    </div>
+
+    <!-- SUMMARY -->
+    <div id="view-summary" class="view">
+      <div class="section-title">Daily Summary</div>
+      <div class="sum-cards" id="sum-cards"></div>
+      <div class="pay-breakdown" id="pay-breakdown"></div>
+    </div>
+
+    <!-- MENU MANAGEMENT -->
+    <div id="view-manage" class="view">
+      <div class="section-title">Menu Management</div>
+      <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap">
+        <div style="min-width:200px;max-width:240px">
+          <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text2);margin-bottom:8px">Categories</div>
+          <div id="mgmt-cats"></div>
+          <div style="display:flex;gap:8px;margin-top:10px">
+            <input class="form-input" id="mgmt-new-cat" placeholder="New category…" style="flex:1" onkeydown="if(event.key==='Enter')addCategory()">
+            <button class="btn btn-primary btn-sm" onclick="addCategory()">+ Add</button>
+          </div>
+        </div>
+        <div style="flex:1;min-width:300px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--text2)">Items</div>
+            <button class="btn btn-primary btn-sm" onclick="openItemModal()">+ Add Item</button>
+          </div>
+          <div id="mgmt-cat-filter" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px"></div>
+          <div id="mgmt-items-list"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS -->
+    <div id="view-settings" class="view">
+      <div class="section-title">Settings</div>
+      <div class="settings-grid" id="settings-form"></div>
+      <div style="margin-top:14px">
+        <button class="btn btn-primary" onclick="saveSettings()">💾 Save Settings</button>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+
+  <!-- ORDER PANEL -->
+  <div id="order-panel">
+    <div id="op-header" class="op-header">
+      <div class="op-table-row">
+        <div class="op-table-title" id="op-table-title">No Table Selected</div>
+        <div style="display:flex;gap:5px">
+          <button class="btn btn-sm btn-secondary" onclick="openKOT()" id="btn-kot" style="display:none">KOT</button>
+          <button class="btn btn-sm btn-secondary" onclick="saveDraft()" id="btn-draft" style="display:none">Save</button>
+        </div>
+      </div>
+      <div id="split-tabs-wrap" style="display:none">
+        <div class="split-tabs" id="split-tabs"></div>
+      </div>
+      <div id="op-waiter-row" class="op-waiter-row" style="display:none">
+        <span class="op-waiter-label">Waiter:</span>
+        <input class="op-waiter-input" id="op-waiter-input" placeholder="Waiter name…" oninput="updateWaiter(this.value)">
+      </div>
+    </div>
+    <div id="op-items" class="op-items">
+      <div class="op-empty">
+        <div class="op-empty-icon">🍽</div>
+        <div>Select a table to begin</div>
+      </div>
+    </div>
+    <div id="op-summary" class="op-summary" style="display:none">
+      <div class="sum-row">
+        <span class="sum-label">Subtotal</span>
+        <span class="sum-val" id="sum-subtotal">₹0.00</span>
+      </div>
+      <div class="sum-row">
+        <span class="sum-label">Tax (<input class="sum-input" id="tax-rate-input" type="number" min="0" max="100" step="0.1" oninput="recalc()" style="width:45px">%)</span>
+        <span class="sum-val" id="sum-tax">₹0.00</span>
+      </div>
+      <div class="sum-row" id="sc-row">
+        <span class="sum-label">Service Charge (<span id="sc-pct-display">10</span>%)</span>
+        <span class="sum-val" id="sum-sc">₹0.00</span>
+      </div>
+      <div class="sum-row">
+        <span class="sum-label">Discount
+          <span class="disc-wrap">
+            <input class="sum-input" id="disc-val-input" type="number" min="0" step="0.01" oninput="recalc()" style="width:52px">
+            <button class="disc-toggle-btn" id="disc-type-btn" onclick="toggleDiscType()">%</button>
+          </span>
+        </span>
+        <span class="sum-val" id="sum-disc" style="color:var(--red)">-₹0.00</span>
+      </div>
+      <div class="sum-row" id="tip-row">
+        <span class="sum-label">Tip</span>
+        <input class="sum-input" id="tip-input" type="number" min="0" step="1" oninput="recalc()">
+      </div>
+      <div class="sum-row total">
+        <span>Grand Total</span>
+        <span id="sum-total">₹0.00</span>
+      </div>
+    </div>
+    <div id="op-actions" class="op-actions" style="display:none">
+      <button class="btn btn-danger btn-sm" onclick="clearOrder()" title="Clear order">🗑</button>
+      <button class="btn btn-secondary btn-sm" onclick="addSplitOrder()" title="Split bill">⚡ Split</button>
+      <button class="btn btn-primary" onclick="openCheckout()" style="flex:1">💳 Checkout</button>
+    </div>
+  </div><!-- /order-panel -->
+</div><!-- /main -->
+
+<!-- CONTEXT MENU -->
+<div id="ctx-menu">
+  <div class="ctx-item" onclick="ctxSetStatus('available')">✅ Set Available</div>
+  <div class="ctx-item" onclick="ctxSetStatus('reserved')">📌 Set Reserved</div>
+  <div class="ctx-item" onclick="ctxSetStatus('occupied')">🔴 Set Occupied</div>
+  <div class="ctx-item" onclick="ctxAssignWaiter()">👤 Assign Waiter</div>
+  <div class="ctx-item" onclick="ctxEditCapacity()">🪑 Edit Capacity</div>
+  <div class="ctx-item danger" onclick="ctxClearOrder()">🗑 Clear Order</div>
+</div>
+
+<!-- KOT MODAL -->
+<div class="overlay hidden" id="kot-overlay">
+  <div class="modal modal-md">
+    <button class="modal-close" onclick="closeModal('kot-overlay')">✕</button>
+    <div class="modal-title">Kitchen Order Ticket</div>
+    <div id="kot-content"></div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-primary" style="flex:1" onclick="printKOT()">🖨 Print KOT</button>
+      <button class="btn btn-secondary" onclick="closeModal('kot-overlay')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- CHECKOUT MODAL -->
+<div class="overlay hidden" id="checkout-overlay">
+  <div class="modal modal-lg">
+    <button class="modal-close" onclick="closeModal('checkout-overlay')">✕</button>
+    <div class="modal-title">Checkout</div>
+    <div id="checkout-content"></div>
+  </div>
+</div>
+
+<!-- RECEIPT MODAL -->
+<div class="overlay hidden" id="receipt-overlay">
+  <div class="modal modal-md">
+    <button class="modal-close" onclick="closeModal('receipt-overlay')">✕</button>
+    <div class="modal-title">Receipt</div>
+    <div id="receipt-content"></div>
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-primary" style="flex:1" onclick="printReceipt()">🖨 Print Receipt</button>
+      <button class="btn btn-secondary" onclick="closeModal('receipt-overlay')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- WAITER ASSIGN MODAL -->
+<div class="overlay hidden" id="waiter-overlay">
+  <div class="modal modal-sm">
+    <button class="modal-close" onclick="closeModal('waiter-overlay')">✕</button>
+    <div class="modal-title">Assign Waiter</div>
+    <div class="form-group" style="margin-bottom:14px">
+      <label class="form-label">Waiter Name</label>
+      <input class="form-input" id="waiter-assign-input" placeholder="Enter waiter name…">
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" style="flex:1" onclick="confirmWaiterAssign()">Assign</button>
+      <button class="btn btn-secondary" onclick="closeModal('waiter-overlay')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ITEM EDIT MODAL -->
+<div class="overlay hidden" id="item-edit-overlay">
+  <div class="modal modal-md">
+    <button class="modal-close" onclick="closeModal('item-edit-overlay')">✕</button>
+    <div class="modal-title" id="item-edit-title">Add Item</div>
+    <div class="settings-grid" style="gap:12px">
+      <div class="form-group">
+        <label class="form-label">Item Name *</label>
+        <input class="form-input" id="ie-name" placeholder="e.g. Paneer Tikka">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Price *</label>
+        <input class="form-input" id="ie-price" type="number" min="0" step="0.01" placeholder="0.00">
+      </div>
+      <div class="form-group" style="grid-column:1/-1">
+        <label class="form-label">Description</label>
+        <input class="form-input" id="ie-desc" placeholder="Short description…">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Category</label>
+        <select class="form-input" id="ie-cat"></select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Type</label>
+        <select class="form-input" id="ie-veg">
+          <option value="1">🟢 Vegetarian</option>
+          <option value="0">🔴 Non-Vegetarian</option>
+        </select>
+      </div>
+    </div>
+    <input type="hidden" id="ie-id">
+    <div style="display:flex;gap:8px;margin-top:16px">
+      <button class="btn btn-primary" style="flex:1" onclick="saveItem()">💾 Save Item</button>
+      <button class="btn btn-secondary" onclick="closeModal('item-edit-overlay')">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- PRINT AREA -->
+<div id="print-area"></div>
+
+<!-- NOTIFICATION -->
+<div id="notif"></div>
+
+<script>
+// ═══════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════
+let S = {
+  restaurantName:'The Golden Fork',
+  address:'123 Main Street, City — 400001',
+  taxId:'GSTIN: 27XXXXXX1234Z1',
+  taxRate:5,
+  serviceChargeRate:10,
+  currencySymbol:'₹',
+  cashierName:'Admin',
+  tipEnabled:true,
+  serviceChargeEnabled:true,
+  tableCount:12,
+  shift:'Morning'
+};
+
+let tables = [];
+let menuCategories = [];
+let menuItems = [];
+let orderHistory = [];
+let activeView = 'floor';
+let selectedTableId = null;
+let currentSplitIdx = 0;
+let discountType = '%'; // '%' or 'flat'
+let ctxTableId = null;
+let historyFilter = 'all';
+let activeCategory = 'All';
+
+// ═══════════════════════════════════════════════
+//  DEFAULTS
+// ═══════════════════════════════════════════════
+function defaultMenuCategories(){
+  return ['Starters','Main Course','Breads','Rice & Biryani','Beverages','Desserts'];
+}
+
+function defaultMenuItems(){
+  return [
+    {id:'i1',name:'Paneer Tikka',desc:'Marinated cottage cheese grilled in tandoor',price:280,cat:'Starters',veg:true,avail:true},
+    {id:'i2',name:'Chicken Wings',desc:'Crispy buffalo style with dipping sauce',price:320,cat:'Starters',veg:false,avail:true},
+    {id:'i3',name:'Veg Spring Rolls',desc:'Crispy rolls with mixed vegetables',price:180,cat:'Starters',veg:true,avail:true},
+    {id:'i4',name:'Fish Tikka',desc:'Marinated fish fillet with mint chutney',price:360,cat:'Starters',veg:false,avail:true},
+    {id:'i5',name:'Mushroom Soup',desc:'Creamy mushroom with herbs',price:140,cat:'Starters',veg:true,avail:true},
+    {id:'i6',name:'Paneer Butter Masala',desc:'Rich tomato-based curry with cottage cheese',price:320,cat:'Main Course',veg:true,avail:true},
+    {id:'i7',name:'Dal Makhani',desc:'Black lentils slow-cooked overnight',price:260,cat:'Main Course',veg:true,avail:true},
+    {id:'i8',name:'Chicken Tikka Masala',desc:'Tender chicken in spiced tomato gravy',price:380,cat:'Main Course',veg:false,avail:true},
+    {id:'i9',name:'Lamb Rogan Josh',desc:'Slow-cooked lamb in Kashmiri spices',price:420,cat:'Main Course',veg:false,avail:true},
+    {id:'i10',name:'Palak Paneer',desc:'Cottage cheese in spinach gravy',price:300,cat:'Main Course',veg:true,avail:true},
+    {id:'i11',name:'Butter Naan',desc:'Soft leavened bread baked in tandoor',price:60,cat:'Breads',veg:true,avail:true},
+    {id:'i12',name:'Tandoori Roti',desc:'Whole wheat bread from tandoor',price:40,cat:'Breads',veg:true,avail:true},
+    {id:'i13',name:'Garlic Naan',desc:'Naan topped with garlic and butter',price:80,cat:'Breads',veg:true,avail:true},
+    {id:'i14',name:'Laccha Paratha',desc:'Flaky multi-layered whole wheat bread',price:70,cat:'Breads',veg:true,avail:true},
+    {id:'i15',name:'Chicken Biryani',desc:'Aromatic basmati rice with spiced chicken',price:380,cat:'Rice & Biryani',veg:false,avail:true},
+    {id:'i16',name:'Veg Biryani',desc:'Fragrant rice with seasonal vegetables',price:280,cat:'Rice & Biryani',veg:true,avail:true},
+    {id:'i17',name:'Steamed Rice',desc:'Plain basmati rice',price:80,cat:'Rice & Biryani',veg:true,avail:true},
+    {id:'i18',name:'Lassi',desc:'Chilled yoghurt drink, sweet or salted',price:80,cat:'Beverages',veg:true,avail:true},
+    {id:'i19',name:'Mango Shake',desc:'Fresh mango blended with milk',price:120,cat:'Beverages',veg:true,avail:true},
+    {id:'i20',name:'Cold Coffee',desc:'Iced coffee blended with milk',price:100,cat:'Beverages',veg:true,avail:true},
+    {id:'i21',name:'Fresh Lime Soda',desc:'Tangy lime soda, sweet or salted',price:70,cat:'Beverages',veg:true,avail:true},
+    {id:'i22',name:'Gulab Jamun',desc:'Soft milk dumplings in rose syrup',price:120,cat:'Desserts',veg:true,avail:true},
+    {id:'i23',name:'Kulfi Falooda',desc:'Traditional ice cream with vermicelli',price:160,cat:'Desserts',veg:true,avail:true},
+    {id:'i24',name:'Rasgulla',desc:'Soft chenna balls in sugar syrup',price:100,cat:'Desserts',veg:true,avail:true},
+    {id:'i25',name:'Brownie Sundae',desc:'Warm brownie with vanilla ice cream',price:220,cat:'Desserts',veg:true,avail:true},
+  ];
+}
+
+function newOrder(){
+  return {
+    id:'ord_'+Date.now()+'_'+Math.random().toString(36).slice(2,6),
+    items:[],
+    taxRate:S.taxRate,
+    discountVal:0,
+    discountType:'%',
+    tip:0,
+    label:'Order 1'
+  };
+}
+
+function buildFloorPlan(){
+  const defs=[
+    // Main Hall – Row 1
+    {n:1,c:2,sh:'round',x:75,y:95},{n:2,c:4,sh:'round',x:180,y:95},
+    {n:3,c:4,sh:'round',x:285,y:95},{n:4,c:4,sh:'round',x:395,y:95},
+    {n:5,c:6,sh:'sm',x:500,y:95},{n:6,c:2,sh:'round',x:615,y:95},
+    {n:7,c:4,sh:'round',x:720,y:95},
+    // Main Hall – Row 2
+    {n:8,c:4,sh:'round',x:75,y:235},{n:9,c:6,sh:'sm',x:190,y:235},
+    {n:10,c:4,sh:'round',x:320,y:235},{n:11,c:4,sh:'round',x:425,y:235},
+    {n:12,c:6,sh:'sm',x:530,y:235},{n:13,c:2,sh:'round',x:645,y:235},
+    {n:14,c:4,sh:'round',x:750,y:235},
+    // Main Hall – Row 3
+    {n:15,c:8,sh:'lg',x:115,y:380},{n:16,c:4,sh:'round',x:285,y:380},
+    {n:17,c:4,sh:'round',x:390,y:380},{n:18,c:6,sh:'sm',x:510,y:380},
+    {n:19,c:4,sh:'round',x:630,y:380},{n:20,c:2,sh:'round',x:740,y:380},
+    // Bar & Lounge – Stools
+    {n:21,c:2,sh:'round',x:875,y:90},{n:22,c:2,sh:'round',x:975,y:90},
+    {n:23,c:2,sh:'round',x:1075,y:90},{n:24,c:2,sh:'round',x:1170,y:90},
+    // Bar & Lounge – Lounge tables
+    {n:25,c:4,sh:'round',x:890,y:310},{n:26,c:4,sh:'round',x:1020,y:310},
+    {n:27,c:4,sh:'round',x:1150,y:310},
+    // Outdoor Patio – Row 1
+    {n:28,c:4,sh:'round',x:80,y:545},{n:29,c:4,sh:'round',x:195,y:545},
+    {n:30,c:4,sh:'round',x:310,y:545},{n:31,c:4,sh:'round',x:430,y:545},
+    {n:32,c:6,sh:'sm',x:555,y:545},{n:33,c:4,sh:'round',x:680,y:545},
+    // Outdoor Patio – Row 2
+    {n:34,c:4,sh:'round',x:160,y:645},{n:35,c:4,sh:'round',x:295,y:645},
+    {n:36,c:4,sh:'round',x:430,y:645},{n:37,c:4,sh:'round',x:575,y:645},
+    // Private Dining
+    {n:38,c:10,sh:'xl',x:985,y:545},{n:39,c:8,sh:'lg',x:985,y:645},
+  ];
+  return defs.map(d=>({
+    id:'t'+d.n,number:d.n,capacity:d.c,
+    shape:d.sh,x:d.x,y:d.y,
+    status:'available',waiter:'',orders:[newOrder()]
+  }));
+}
+
+// ═══════════════════════════════════════════════
+//  PERSISTENCE
+// ═══════════════════════════════════════════════
+function save(){
+  try{
+    localStorage.setItem('pos_settings',JSON.stringify(S));
+    localStorage.setItem('pos_tables',JSON.stringify(tables));
+    localStorage.setItem('pos_menu',JSON.stringify({cats:menuCategories,items:menuItems}));
+    localStorage.setItem('pos_history',JSON.stringify(orderHistory));
+  }catch(e){}
+}
+
+function load(){
+  try{
+    const ss=localStorage.getItem('pos_settings');
+    if(ss)Object.assign(S,JSON.parse(ss));
+    const mt=localStorage.getItem('pos_menu');
+    if(mt){const d=JSON.parse(mt);menuCategories=d.cats;menuItems=d.items;}
+    else{menuCategories=defaultMenuCategories();menuItems=defaultMenuItems();}
+    const th=localStorage.getItem('pos_history');
+    if(th)orderHistory=JSON.parse(th);
+    const tt=localStorage.getItem('pos_tables');
+    if(tt){
+      const saved=JSON.parse(tt);
+      tables=buildFloorPlan();
+      saved.forEach(sv=>{
+        const t=tables.find(t=>t.id===sv.id);
+        if(t){t.status=sv.status;t.waiter=sv.waiter;t.orders=sv.orders;}
+      });
+    } else {
+      tables=buildFloorPlan();
+    }
+  }catch(e){
+    menuCategories=defaultMenuCategories();
+    menuItems=defaultMenuItems();
+    tables=buildFloorPlan();
+  }
+}
+
+// ═══════════════════════════════════════════════
+//  CLOCK
+// ═══════════════════════════════════════════════
+function updateClock(){
+  const now=new Date();
+  const hh=String(now.getHours()).padStart(2,'0');
+  const mm=String(now.getMinutes()).padStart(2,'0');
+  const ss=String(now.getSeconds()).padStart(2,'0');
+  document.getElementById('clock-time').textContent=`${hh}:${mm}:${ss}`;
+  const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  document.getElementById('clock-date').textContent=`${days[now.getDay()]}, ${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
+  const h=now.getHours();
+  const autoShift=h<12?'Morning':h<17?'Afternoon':'Evening';
+  document.getElementById('shift-display').textContent=(S.shift||autoShift)+' Shift';
+}
+
+// ═══════════════════════════════════════════════
+//  NAVIGATION
+// ═══════════════════════════════════════════════
+function showView(v){
+  document.querySelectorAll('.view').forEach(el=>el.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(el=>el.classList.remove('active'));
+  document.getElementById('view-'+v).classList.add('active');
+  document.querySelector(`.nav-btn[data-view="${v}"]`).classList.add('active');
+  activeView=v;
+  if(v==='history')renderHistory();
+  if(v==='summary')renderSummary();
+  if(v==='settings')renderSettings();
+  if(v==='menu')renderMenu();
+  if(v==='manage')renderManage();
+}
+
+// ═══════════════════════════════════════════════
+//  FLOOR PLAN
+// ═══════════════════════════════════════════════
+function renderFloor(){
+  const wrap=document.getElementById('floor-canvas-wrap');
+  if(!wrap)return;
+  wrap.innerHTML='';
+  const canvas=document.createElement('div');
+  canvas.className='floor-canvas';
+
+  // Sections
+  [{id:'main',l:0,t:0,w:800,h:450,lbl:'Main Dining Hall'},
+   {id:'bar',l:830,t:0,w:370,h:450,lbl:'Bar & Lounge'},
+   {id:'patio',l:0,t:480,w:800,h:220,lbl:'Outdoor Patio'},
+   {id:'private',l:830,t:480,w:370,h:220,lbl:'Private Dining'},
+  ].forEach(s=>{
+    const d=document.createElement('div');
+    d.className=`floor-section ${s.id}`;
+    d.style.cssText=`left:${s.l}px;top:${s.t}px;width:${s.w}px;height:${s.h}px`;
+    d.innerHTML=`<div class="floor-section-label">${s.lbl}</div>`;
+    canvas.appendChild(d);
+  });
+
+  // Walkways
+  [{x:0,y:450,w:1200,h:30},{x:800,y:0,w:30,h:700}].forEach(w=>{
+    const d=document.createElement('div');
+    d.className='floor-walkway';
+    d.style.cssText=`left:${w.x}px;top:${w.y}px;width:${w.w}px;height:${w.h}px`;
+    canvas.appendChild(d);
+  });
+
+  // Bar counter
+  const bc=document.createElement('div');
+  bc.className='floor-bar-counter';
+  bc.style.cssText='left:843px;top:140px;width:345px;height:60px';
+  bc.textContent='Bar Counter';
+  canvas.appendChild(bc);
+
+  // Corner plants
+  ['left:12px;top:12px','left:762px;top:12px','left:12px;top:420px','left:762px;top:420px',
+   'left:12px;top:490px','left:762px;top:490px'].forEach(pos=>{
+    const p=document.createElement('div');
+    p.className='floor-plant';
+    p.style.cssText=pos;
+    p.textContent='🪴';
+    canvas.appendChild(p);
+  });
+
+  // Markers
+  [{text:'🚪 Entrance',s:'bottom:8px;left:12px'},
+   {text:'👨‍🍳 Kitchen',s:'top:8px;right:8px'},
+   {text:'💺 Host Stand',s:'bottom:8px;left:340px'},
+  ].forEach(m=>{
+    const d=document.createElement('div');
+    d.className='floor-marker';
+    d.style.cssText=m.s;
+    d.textContent=m.text;
+    canvas.appendChild(d);
+  });
+
+  // Tables
+  tables.forEach(t=>{
+    const totalItems=t.orders.reduce((s,o)=>s+o.items.reduce((a,i)=>a+i.qty,0),0);
+    const d=document.createElement('div');
+    d.className=`floor-table ${t.shape} ${t.status}${t.id===selectedTableId?' selected':''}`;
+    d.style.cssText=`left:${t.x}px;top:${t.y}px`;
+    d.dataset.id=t.id;
+    d.innerHTML=`${totalItems>0?`<div class="ft-badge">${totalItems}</div>`:''}
+      <div class="ft-num">${t.number}</div>
+      <div class="ft-cap">${t.capacity}p</div>`;
+    d.addEventListener('click',()=>selectTable(t.id));
+    d.addEventListener('contextmenu',e=>{e.preventDefault();showCtxMenu(e,t.id);});
+    canvas.appendChild(d);
+  });
+
+  wrap.appendChild(canvas);
+}
+
+function selectTable(id){
+  selectedTableId=id;
+  currentSplitIdx=0;
+  renderFloor();
+  renderOrderPanel();
+  if(activeView==='floor'){
+    // switch to menu for ordering
+    showView('menu');
+    // but keep order panel showing
+  }
+  document.getElementById('menu-search').value='';
+  renderMenuItems();
+}
+
+// ─── Context Menu ───
+function showCtxMenu(e,tableId){
+  ctxTableId=tableId;
+  const m=document.getElementById('ctx-menu');
+  m.style.display='block';
+  let x=e.clientX,y=e.clientY;
+  if(x+170>window.innerWidth)x=window.innerWidth-175;
+  if(y+160>window.innerHeight)y=window.innerHeight-165;
+  m.style.left=x+'px';m.style.top=y+'px';
+}
+document.addEventListener('click',()=>{document.getElementById('ctx-menu').style.display='none';});
+document.addEventListener('contextmenu',e=>{if(!e.target.closest('.floor-table'))document.getElementById('ctx-menu').style.display='none';});
+
+function ctxSetStatus(st){
+  const t=getTable(ctxTableId);
+  if(!t)return;
+  t.status=st;
+  if(st==='available'&&ctxTableId===selectedTableId){
+    // keep it but reflect status
+  }
+  save();renderFloor();
+  notify(`Table ${t.number} set to ${st}`,'info');
+}
+
+function ctxEditCapacity(){
+  const t=getTable(ctxTableId);
+  if(!t)return;
+  const val=prompt(`Capacity for Table ${t.number}:`,t.capacity);
+  if(val&&!isNaN(val)&&+val>0){t.capacity=+val;save();renderFloor();}
+}
+
+function ctxClearOrder(){
+  const t=getTable(ctxTableId);
+  if(!t)return;
+  if(!confirm(`Clear all orders for Table ${t.number}?`))return;
+  t.orders=[newOrder()];
+  t.status='available';
+  if(ctxTableId===selectedTableId)renderOrderPanel();
+  save();renderFloor();
+  notify(`Table ${t.number} cleared`,'success');
+}
+
+// ═══════════════════════════════════════════════
+//  MENU
+// ═══════════════════════════════════════════════
+function renderMenu(){
+  const tabsEl=document.getElementById('cat-tabs');
+  tabsEl.innerHTML='';
+  const allBtn=document.createElement('button');
+  allBtn.className='cat-btn'+(activeCategory==='All'?' active':'');
+  allBtn.textContent='All';
+  allBtn.onclick=()=>{activeCategory='All';renderMenu();};
+  tabsEl.appendChild(allBtn);
+  menuCategories.forEach(c=>{
+    const btn=document.createElement('button');
+    btn.className='cat-btn'+(activeCategory===c?' active':'');
+    btn.textContent=c;
+    btn.onclick=()=>{activeCategory=c;renderMenu();};
+    tabsEl.appendChild(btn);
+  });
+  renderMenuItems();
+}
+
+function renderMenuItems(){
+  const q=(document.getElementById('menu-search')||{value:''}).value.toLowerCase();
+  const grid=document.getElementById('menu-items-grid');
+  grid.innerHTML='';
+  const filtered=menuItems.filter(it=>{
+    const catOk=activeCategory==='All'||it.cat===activeCategory;
+    const qOk=!q||it.name.toLowerCase().includes(q)||it.desc.toLowerCase().includes(q);
+    return catOk&&qOk;
+  });
+  if(!filtered.length){
+    grid.innerHTML='<div style="color:var(--text2);font-size:13px;grid-column:1/-1;padding:20px 0">No items found</div>';
+    return;
+  }
+  filtered.forEach(it=>{
+    const card=document.createElement('div');
+    card.className='menu-card'+(it.avail?'':' unavail');
+    card.dataset.id=it.id;
+    card.innerHTML=`
+      <div class="veg-dot ${it.veg?'veg':'nveg'}"></div>
+      <div class="mc-name">${esc(it.name)}</div>
+      <div class="mc-desc">${esc(it.desc)}</div>
+      <div class="mc-footer">
+        <div class="mc-price">${S.currencySymbol}${it.price.toFixed(2)}</div>
+        <button class="mc-toggle ${it.avail?'':'unavail-active'}" onclick="toggleItemAvail('${it.id}',event)">
+          ${it.avail?'Mark N/A':'Enable'}
+        </button>
+      </div>
+    `;
+    if(it.avail){
+      card.addEventListener('click',e=>{
+        if(e.target.classList.contains('mc-toggle'))return;
+        addToOrder(it.id);
+      });
+    }
+    grid.appendChild(card);
+  });
+}
+
+function toggleItemAvail(id,e){
+  e.stopPropagation();
+  const it=menuItems.find(m=>m.id===id);
+  if(!it)return;
+  it.avail=!it.avail;
+  save();renderMenuItems();
+  notify(`${it.name} ${it.avail?'enabled':'marked unavailable'}`,'info');
+}
+
+// ═══════════════════════════════════════════════
+//  ORDER MANAGEMENT
+// ═══════════════════════════════════════════════
+function getTable(id){return tables.find(t=>t.id===id);}
+
+function getActiveOrder(){
+  if(!selectedTableId)return null;
+  const t=getTable(selectedTableId);
+  if(!t)return null;
+  if(!t.orders[currentSplitIdx])currentSplitIdx=0;
+  return t.orders[currentSplitIdx];
+}
+
+function addToOrder(itemId){
+  if(!selectedTableId){
+    notify('Select a table first!','error');return;
+  }
+  const it=menuItems.find(m=>m.id===itemId);
+  if(!it||!it.avail)return;
+  const ord=getActiveOrder();
+  if(!ord)return;
+  const existing=ord.items.find(i=>i.itemId===itemId);
+  if(existing){existing.qty++;}
+  else{
+    ord.items.push({itemId,name:it.name,price:it.price,qty:1,note:''});
+  }
+  const t=getTable(selectedTableId);
+  if(t.status==='available'||t.status==='reserved')t.status='occupied';
+  save();renderOrderPanel();renderFloor();
+  notify(`Added: ${it.name}`,'success');
+}
+
+function updateItemQty(itemId,delta){
+  const ord=getActiveOrder();
+  if(!ord)return;
+  const idx=ord.items.findIndex(i=>i.itemId===itemId);
+  if(idx<0)return;
+  ord.items[idx].qty+=delta;
+  if(ord.items[idx].qty<=0)ord.items.splice(idx,1);
+  save();renderOrderPanel();renderFloor();
+}
+
+function removeItem(itemId){
+  const ord=getActiveOrder();
+  if(!ord)return;
+  ord.items=ord.items.filter(i=>i.itemId!==itemId);
+  save();renderOrderPanel();renderFloor();
+}
+
+function updateItemNote(itemId,note){
+  const ord=getActiveOrder();
+  if(!ord)return;
+  const it=ord.items.find(i=>i.itemId===itemId);
+  if(it)it.note=note;
+  save();
+}
+
+function updateWaiter(val){
+  if(!selectedTableId)return;
+  getTable(selectedTableId).waiter=val;
+  save();renderFloor();
+}
+
+function toggleDiscType(){
+  const ord=getActiveOrder();
+  if(!ord)return;
+  discountType=discountType==='%'?'flat':'%';
+  ord.discountType=discountType;
+  const btn=document.getElementById('disc-type-btn');
+  btn.textContent=discountType;
+  btn.classList.toggle('on',discountType==='flat');
+  recalc();
+}
+
+function recalc(){
+  const ord=getActiveOrder();
+  if(!ord)return;
+  ord.taxRate=parseFloat(document.getElementById('tax-rate-input').value)||0;
+  ord.discountVal=parseFloat(document.getElementById('disc-val-input').value)||0;
+  ord.tip=parseFloat(document.getElementById('tip-input').value)||0;
+  const totals=calcTotals(ord);
+  const c=S.currencySymbol;
+  document.getElementById('sum-subtotal').textContent=c+totals.subtotal.toFixed(2);
+  document.getElementById('sum-tax').textContent=c+totals.tax.toFixed(2);
+  document.getElementById('sum-sc').textContent=c+totals.sc.toFixed(2);
+  document.getElementById('sum-disc').textContent='-'+c+totals.disc.toFixed(2);
+  document.getElementById('sum-total').textContent=c+totals.total.toFixed(2);
+  save();
+}
+
+function calcTotals(ord){
+  const subtotal=ord.items.reduce((s,i)=>s+i.price*i.qty,0);
+  const tax=subtotal*(ord.taxRate||S.taxRate)/100;
+  const sc=S.serviceChargeEnabled?subtotal*(S.serviceChargeRate/100):0;
+  let disc=0;
+  if(ord.discountType==='%')disc=subtotal*(ord.discountVal/100);
+  else disc=ord.discountVal||0;
+  disc=Math.min(disc,subtotal);
+  const tip=ord.tip||0;
+  const total=Math.max(0,subtotal+tax+sc-disc+tip);
+  return{subtotal,tax,sc,disc,tip,total};
+}
+
+function addSplitOrder(){
+  if(!selectedTableId)return;
+  const t=getTable(selectedTableId);
+  const idx=t.orders.length+1;
+  const o=newOrder();
+  o.label=`Order ${idx}`;
+  t.orders.push(o);
+  currentSplitIdx=t.orders.length-1;
+  save();renderOrderPanel();
+}
+
+function clearOrder(){
+  if(!selectedTableId)return;
+  const t=getTable(selectedTableId);
+  const ord=getActiveOrder();
+  if(!ord)return;
+  if(ord.items.length>0&&!confirm('Clear this order?'))return;
+  if(t.orders.length>1){
+    t.orders.splice(currentSplitIdx,1);
+    currentSplitIdx=Math.max(0,currentSplitIdx-1);
+  } else {
+    t.orders[0]=newOrder();
+    t.status='available';
+  }
+  save();renderOrderPanel();renderFloor();
+}
+
+function saveDraft(){
+  save();notify('Draft saved','success');
+}
+
+// ═══════════════════════════════════════════════
+//  RENDER ORDER PANEL
+// ═══════════════════════════════════════════════
+function renderOrderPanel(){
+  const itemsEl=document.getElementById('op-items');
+  const summaryEl=document.getElementById('op-summary');
+  const actionsEl=document.getElementById('op-actions');
+  const headerEl=document.getElementById('op-header');
+
+  if(!selectedTableId){
+    document.getElementById('op-table-title').textContent='No Table Selected';
+    document.getElementById('split-tabs-wrap').style.display='none';
+    document.getElementById('op-waiter-row').style.display='none';
+    document.getElementById('btn-kot').style.display='none';
+    document.getElementById('btn-draft').style.display='none';
+    itemsEl.innerHTML='<div class="op-empty"><div class="op-empty-icon">🍽</div><div>Select a table to begin</div></div>';
+    summaryEl.style.display='none';
+    actionsEl.style.display='none';
+    return;
+  }
+
+  const t=getTable(selectedTableId);
+  if(!t)return;
+  const ord=getActiveOrder();
+
+  document.getElementById('op-table-title').textContent=`Table ${t.number}`;
+  document.getElementById('btn-kot').style.display='';
+  document.getElementById('btn-draft').style.display='';
+  document.getElementById('op-waiter-row').style.display='flex';
+  document.getElementById('op-waiter-input').value=t.waiter||'';
+
+  // Split tabs
+  const splitWrap=document.getElementById('split-tabs-wrap');
+  const splitTabsEl=document.getElementById('split-tabs');
+  if(t.orders.length>1){
+    splitWrap.style.display='block';
+    splitTabsEl.innerHTML='';
+    t.orders.forEach((o,i)=>{
+      const btn=document.createElement('button');
+      btn.className='split-tab'+(i===currentSplitIdx?' active':'');
+      btn.textContent=o.label||`Order ${i+1}`;
+      btn.onclick=()=>{currentSplitIdx=i;renderOrderPanel();};
+      splitTabsEl.appendChild(btn);
+    });
+    const addBtn=document.createElement('button');
+    addBtn.className='split-tab-add';
+    addBtn.textContent='+ Split';
+    addBtn.onclick=addSplitOrder;
+    splitTabsEl.appendChild(addBtn);
+  } else {
+    splitWrap.style.display='none';
+  }
+
+  // Items
+  if(!ord||ord.items.length===0){
+    itemsEl.innerHTML='<div class="op-empty"><div class="op-empty-icon">🛒</div><div>No items yet</div><div style="font-size:11px;color:var(--text3)">Click menu items to add</div></div>';
+    summaryEl.style.display='none';
+    actionsEl.style.display='none';
+    return;
+  }
+
+  itemsEl.innerHTML='';
+  ord.items.forEach(it=>{
+    const div=document.createElement('div');
+    div.className='op-item';
+    div.innerHTML=`
+      <div class="op-item-row">
+        <div class="op-item-name">${esc(it.name)}</div>
+        <div class="qty-ctrl">
+          <button class="qty-btn" onclick="updateItemQty('${it.itemId}',-1)">−</button>
+          <span class="qty-num">${it.qty}</span>
+          <button class="qty-btn" onclick="updateItemQty('${it.itemId}',1)">+</button>
+        </div>
+        <div class="item-line-price">${S.currencySymbol}${(it.price*it.qty).toFixed(2)}</div>
+        <button class="rm-btn" onclick="removeItem('${it.itemId}')">×</button>
+      </div>
+      <input class="item-note-input" placeholder="Special instructions…" value="${esc(it.note||'')}" oninput="updateItemNote('${it.itemId}',this.value)">
+    `;
+    itemsEl.appendChild(div);
+  });
+
+  summaryEl.style.display='block';
+  actionsEl.style.display='flex';
+
+  // Sync inputs
+  const taxInput=document.getElementById('tax-rate-input');
+  taxInput.value=ord.taxRate!==undefined?ord.taxRate:S.taxRate;
+  document.getElementById('disc-val-input').value=ord.discountVal||0;
+  document.getElementById('tip-input').value=ord.tip||0;
+  document.getElementById('sc-row').style.display=S.serviceChargeEnabled?'flex':'none';
+  document.getElementById('tip-row').style.display=S.tipEnabled?'flex':'none';
+  document.getElementById('sc-pct-display').textContent=S.serviceChargeRate;
+
+  discountType=ord.discountType||'%';
+  const dBtn=document.getElementById('disc-type-btn');
+  dBtn.textContent=discountType;
+  dBtn.classList.toggle('on',discountType==='flat');
+
+  recalc();
+}
+
+// ═══════════════════════════════════════════════
+//  KOT
+// ═══════════════════════════════════════════════
+function openKOT(){
+  if(!selectedTableId){notify('Select a table first','error');return;}
+  const t=getTable(selectedTableId);
+  const ord=getActiveOrder();
+  if(!ord||ord.items.length===0){notify('No items in order','error');return;}
+  const now=new Date();
+  const timeStr=now.toLocaleTimeString();
+  const dateStr=now.toLocaleDateString();
+  let html=`<div class="kot-box">
+    <div class="kot-title">KITCHEN ORDER</div>
+    <div class="kot-sub">Table #${t.number} | ${t.waiter||'—'}</div>
+    <div class="kot-sub">${dateStr} ${timeStr}</div>
+    <hr>
+    <div style="font-size:11px;color:#777;margin-bottom:6px">${ord.label||'Order 1'}</div>`;
+  ord.items.forEach(it=>{
+    html+=`<div class="kot-item-row"><div class="kot-item-name">${esc(it.name)}</div><div class="kot-item-qty">×${it.qty}</div></div>`;
+    if(it.note)html+=`<div class="kot-note">→ ${esc(it.note)}</div>`;
+  });
+  html+='</div>';
+  document.getElementById('kot-content').innerHTML=html;
+  document.getElementById('kot-overlay').classList.remove('hidden');
+}
+
+function printKOT(){
+  const t=getTable(selectedTableId);
+  const ord=getActiveOrder();
+  if(!ord)return;
+  const now=new Date();
+  let html=`<div style="font-family:Courier New,monospace;font-size:13px;max-width:300px;margin:0 auto">
+    <div style="font-size:16px;font-weight:700;text-align:center">KITCHEN ORDER</div>
+    <div style="text-align:center;color:#555;font-size:11px">Table #${t.number} | Waiter: ${t.waiter||'—'}</div>
+    <div style="text-align:center;font-size:11px">${now.toLocaleDateString()} ${now.toLocaleTimeString()}</div>
+    <hr style="border:none;border-top:1px dashed #999;margin:6px 0">`;
+  ord.items.forEach(it=>{
+    html+=`<div style="display:flex;justify-content:space-between"><span>${esc(it.name)}</span><span>×${it.qty}</span></div>`;
+    if(it.note)html+=`<div style="font-size:11px;color:#666;padding-left:10px">→ ${esc(it.note)}</div>`;
+  });
+  html+='</div>';
+  doPrint(html);
+  closeModal('kot-overlay');
+}
+
+// ═══════════════════════════════════════════════
+//  CHECKOUT
+// ═══════════════════════════════════════════════
+let coPayMethod='cash';
+let coSplitAmounts={cash:0,card:0,upi:0};
+let coAgg=null;
+let lastReceiptRec=null;
+
+function openCheckout(){
+  if(!selectedTableId){notify('Select a table first','error');return;}
+  const t=getTable(selectedTableId);
+  const allItems=t.orders.flatMap(o=>o.items);
+  if(!allItems.length){notify('No items in order','error');return;}
+
+  coPayMethod='cash';
+  coSplitAmounts={cash:0,card:0,upi:0};
+  coAgg=null;
+
+  // Aggregate totals across all split orders
+  const aggTotals={subtotal:0,tax:0,sc:0,disc:0,tip:0,total:0};
+  t.orders.forEach(o=>{
+    if(!o.items.length)return;
+    const tot=calcTotals(o);
+    aggTotals.subtotal+=tot.subtotal;
+    aggTotals.tax+=tot.tax;
+    aggTotals.sc+=tot.sc;
+    aggTotals.disc+=tot.disc;
+    aggTotals.tip+=tot.tip;
+    aggTotals.total+=tot.total;
+  });
+
+  coAgg=aggTotals;
+  renderCheckout(t,aggTotals);
+  document.getElementById('checkout-overlay').classList.remove('hidden');
+}
+
+function renderCheckout(t,agg){
+  const c=S.currencySymbol;
+  const el=document.getElementById('checkout-content');
+  el.innerHTML=`
+    <div class="pay-methods" id="co-pay-btns">
+      <div class="pay-btn ${coPayMethod==='cash'?'active':''}" onclick="selectPayMethod('cash',this)">💵 Cash</div>
+      <div class="pay-btn ${coPayMethod==='card'?'active':''}" onclick="selectPayMethod('card',this)">💳 Card</div>
+      <div class="pay-btn ${coPayMethod==='upi'?'active':''}" onclick="selectPayMethod('upi',this)">📱 UPI</div>
+      <div class="pay-btn ${coPayMethod==='split'?'active':''}" onclick="selectPayMethod('split',this)">⚡ Split</div>
+    </div>
+    <div id="co-method-area"></div>
+    <hr class="divider">
+    <div class="checkout-row"><span>Subtotal</span><span>${c}${agg.subtotal.toFixed(2)}</span></div>
+    <div class="checkout-row"><span>Tax</span><span>${c}${agg.tax.toFixed(2)}</span></div>
+    ${S.serviceChargeEnabled?`<div class="checkout-row"><span>Service Charge</span><span>${c}${agg.sc.toFixed(2)}</span></div>`:''}
+    ${agg.disc>0?`<div class="checkout-row"><span>Discount</span><span style="color:var(--red)">-${c}${agg.disc.toFixed(2)}</span></div>`:''}
+    ${agg.tip>0?`<div class="checkout-row"><span>Tip</span><span>${c}${agg.tip.toFixed(2)}</span></div>`:''}
+    <div class="checkout-row total"><span>Grand Total</span><span id="co-grand">${c}${agg.total.toFixed(2)}</span></div>
+    <div style="margin-top:6px;font-size:12px;color:var(--text2)">Additional Tip (optional)</div>
+    <div class="checkout-row" style="margin-top:4px">
+      <span>Tip</span>
+      <input class="co-input" id="co-extra-tip" type="number" min="0" value="0" oninput="updateCoTotal(${agg.total})" placeholder="0">
+    </div>
+    <div id="co-final-row" class="checkout-row total"><span>Final Total</span><span id="co-final">${c}${agg.total.toFixed(2)}</span></div>
+    <div style="margin-top:16px;display:flex;gap:8px">
+      <button class="btn btn-green" style="flex:1" onclick="confirmCheckout()">✅ Confirm Payment</button>
+      <button class="btn btn-secondary" onclick="closeModal('checkout-overlay')">Cancel</button>
+    </div>
+  `;
+  renderCoMethodArea(agg.total);
+}
+
+function updateCoTotal(baseTotal){
+  const tip=parseFloat(document.getElementById('co-extra-tip').value)||0;
+  const final=baseTotal+tip;
+  const c=S.currencySymbol;
+  document.getElementById('co-final').textContent=c+final.toFixed(2);
+  if(coPayMethod==='cash'){
+    const cashInput=document.getElementById('co-cash-input');
+    if(cashInput)updateCashChange(final);
+  }
+  if(coPayMethod==='split')updateSplitRemain(final);
+}
+
+function selectPayMethod(m,el){
+  coPayMethod=m;
+  document.querySelectorAll('#co-pay-btns .pay-btn').forEach(b=>b.classList.remove('active'));
+  if(el)el.classList.add('active');
+  const baseTotal=coAgg?coAgg.total:0;
+  const tip=parseFloat((document.getElementById('co-extra-tip')||{value:'0'}).value)||0;
+  renderCoMethodArea(baseTotal+tip);
+}
+
+function renderCoMethodArea(total){
+  const c=S.currencySymbol;
+  const el=document.getElementById('co-method-area');
+  if(!el)return;
+  if(coPayMethod==='cash'){
+    el.innerHTML=`
+      <div style="margin-bottom:10px">
+        <div style="font-size:13px;color:var(--text2);margin-bottom:6px">Amount Received</div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input class="co-input" id="co-cash-input" type="number" min="0" placeholder="${c}0.00" style="flex:1" oninput="updateCashChange(${total})">
+        </div>
+        <div id="cash-change-box" style="margin-top:8px"></div>
+      </div>`;
+  } else if(coPayMethod==='card'){
+    el.innerHTML=`<div style="background:var(--bg3);border-radius:8px;padding:12px;font-size:13px;color:var(--text2)">💳 Card payment of <strong style="color:var(--text)">${c}${total.toFixed(2)}</strong> will be processed.</div>`;
+  } else if(coPayMethod==='upi'){
+    el.innerHTML=`<div style="background:var(--bg3);border-radius:8px;padding:12px;font-size:13px;color:var(--text2)">📱 UPI payment of <strong style="color:var(--text)">${c}${total.toFixed(2)}</strong> — confirm after QR scan.</div>`;
+  } else if(coPayMethod==='split'){
+    const keys=['cash','card','upi'];
+    const labels={'cash':'💵 Cash','card':'💳 Card','upi':'📱 UPI'};
+    let html='<div style="margin-bottom:6px;font-size:12px;color:var(--text2)">Enter amounts for each method:</div>';
+    keys.forEach(k=>{
+      html+=`<div class="split-pay-row">
+        <div class="split-pay-label">${labels[k]}</div>
+        <input class="split-pay-input" type="number" min="0" placeholder="0" value="${coSplitAmounts[k]||''}" oninput="coSplitAmounts['${k}']=parseFloat(this.value)||0;updateSplitRemain(${total})">
+      </div>`;
+    });
+    html+=`<div class="split-remain" id="split-remain-display">Remaining: ${c}${total.toFixed(2)}</div>`;
+    el.innerHTML=html;
+    updateSplitRemain(total);
+  }
+}
+
+function updateCashChange(total){
+  const val=parseFloat(document.getElementById('co-cash-input').value)||0;
+  const box=document.getElementById('cash-change-box');
+  const c=S.currencySymbol;
+  if(val>=total){
+    box.innerHTML=`<div class="change-box">Change: ${c}${(val-total).toFixed(2)}</div>`;
+  } else if(val>0){
+    box.innerHTML=`<div style="background:rgba(255,59,48,0.15);border:1px solid var(--red);border-radius:8px;padding:8px 14px;color:var(--red);font-size:13px">Shortfall: ${c}${(total-val).toFixed(2)}</div>`;
+  } else {
+    box.innerHTML='';
+  }
+}
+
+function updateSplitRemain(total){
+  const paid=Object.values(coSplitAmounts).reduce((a,b)=>a+b,0);
+  const remain=total-paid;
+  const c=S.currencySymbol;
+  const el=document.getElementById('split-remain-display');
+  if(!el)return;
+  el.className='split-remain '+(remain<=0?'ok':'');
+  el.textContent=remain<=0?`✅ Fully covered (+${c}${Math.abs(remain).toFixed(2)} extra)`:`Remaining: ${c}${remain.toFixed(2)}`;
+}
+
+function confirmCheckout(){
+  const agg=coAgg;
+  if(!agg||!selectedTableId)return;
+  const t=getTable(selectedTableId);
+  const total=agg.total;
+  const extraTip=parseFloat((document.getElementById('co-extra-tip')||{value:'0'}).value)||0;
+  const finalTotal=total+extraTip;
+
+  // Validate
+  if(coPayMethod==='cash'){
+    const cash=parseFloat((document.getElementById('co-cash-input')||{value:'0'}).value)||0;
+    if(cash<finalTotal){notify('Cash received is less than total!','error');return;}
+  }
+  if(coPayMethod==='split'){
+    const paid=Object.values(coSplitAmounts).reduce((a,b)=>a+b,0);
+    if(paid<finalTotal-0.01){notify('Total split amounts are less than the total!','error');return;}
+  }
+
+  // Build history record
+  const now=new Date();
+  const rec={
+    id:'h_'+Date.now(),
+    tableNumber:t.number,
+    waiter:t.waiter,
+    datetime:now.toISOString(),
+    orders:JSON.parse(JSON.stringify(t.orders)),
+    payMethod:coPayMethod,
+    splitAmounts:coPayMethod==='split'?{...coSplitAmounts}:null,
+    extraTip,
+    agg:{...agg,tip:agg.tip+extraTip,total:finalTotal},
+    restaurantName:S.restaurantName,
+    address:S.address,
+    taxId:S.taxId,
+    cashier:S.cashierName,
+    currency:S.currencySymbol
+  };
+  orderHistory.push(rec);
+
+  // Free table
+  t.status='available';
+  t.orders=[newOrder()];
+  t.waiter='';
+
+  if(selectedTableId===selectedTableId){
+    selectedTableId=null;
+    renderOrderPanel();
+  }
+
+  save();
+  renderFloor();
+  closeModal('checkout-overlay');
+  notify('Payment confirmed! Table freed.','success');
+
+  // Show receipt
+  showReceipt(rec);
+}
+
+// ═══════════════════════════════════════════════
+//  RECEIPT
+// ═══════════════════════════════════════════════
+function showReceipt(rec){
+  lastReceiptRec=rec;
+  const html=buildReceiptHTML(rec);
+  document.getElementById('receipt-content').innerHTML=`<div class="receipt-box">${html}</div>`;
+  document.getElementById('receipt-overlay').classList.remove('hidden');
+}
+
+function buildReceiptHTML(rec){
+  const c=rec.currency||S.currencySymbol;
+  const dt=new Date(rec.datetime);
+  const dtStr=dt.toLocaleDateString()+' '+dt.toLocaleTimeString();
+  const payLabels={cash:'Cash',card:'Card',upi:'UPI',split:'Split'};
+
+  let allItems=[];
+  rec.orders.forEach(o=>o.items.forEach(it=>{
+    const ex=allItems.find(x=>x.itemId===it.itemId&&x.note===it.note);
+    if(ex)ex.qty+=it.qty;
+    else allItems.push({...it});
+  }));
+
+  let itemsHTML='';
+  allItems.forEach(it=>{
+    const lineTotal=(it.price*it.qty).toFixed(2);
+    itemsHTML+=`<div style="display:flex;justify-content:space-between"><span>${esc(it.name)} ×${it.qty}</span><span>${c}${lineTotal}</span></div>`;
+    if(it.note)itemsHTML+=`<div style="font-size:10px;color:#777;padding-left:8px">↳ ${esc(it.note)}</div>`;
+  });
+
+  const a=rec.agg;
+  let payInfo='';
+  if(rec.payMethod==='split'&&rec.splitAmounts){
+    const labels={cash:'Cash',card:'Card',upi:'UPI'};
+    payInfo=Object.entries(rec.splitAmounts).filter(([,v])=>v>0).map(([k,v])=>`${labels[k]}: ${c}${v.toFixed(2)}`).join(', ');
+  } else {
+    payInfo=payLabels[rec.payMethod]||rec.payMethod;
+  }
+
+  return `
+    <div class="receipt-title">${esc(rec.restaurantName)}</div>
+    <div class="receipt-sub">${esc(rec.address)}</div>
+    <div class="receipt-sub">${esc(rec.taxId)}</div>
+    <hr>
+    <div style="display:flex;justify-content:space-between;font-size:11px">
+      <span>Table: ${rec.tableNumber}</span><span>Waiter: ${rec.waiter||'—'}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:11px">
+      <span>${dtStr}</span><span>Cashier: ${esc(rec.cashier||S.cashierName)}</span>
+    </div>
+    <hr>
+    ${itemsHTML}
+    <hr>
+    <div style="display:flex;justify-content:space-between"><span>Subtotal</span><span>${c}${a.subtotal.toFixed(2)}</span></div>
+    <div style="display:flex;justify-content:space-between"><span>Tax</span><span>${c}${a.tax.toFixed(2)}</span></div>
+    ${S.serviceChargeEnabled?`<div style="display:flex;justify-content:space-between"><span>Service Charge</span><span>${c}${a.sc.toFixed(2)}</span></div>`:''}
+    ${a.disc>0?`<div style="display:flex;justify-content:space-between"><span>Discount</span><span>-${c}${a.disc.toFixed(2)}</span></div>`:''}
+    ${a.tip>0?`<div style="display:flex;justify-content:space-between"><span>Tip</span><span>${c}${a.tip.toFixed(2)}</span></div>`:''}
+    <hr>
+    <div class="receipt-row receipt-total" style="display:flex;justify-content:space-between;font-size:14px;font-weight:700">
+      <span>TOTAL</span><span>${c}${a.total.toFixed(2)}</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;margin-top:4px">
+      <span>Payment</span><span>${payInfo}</span>
+    </div>
+    <hr>
+    <div style="text-align:center;font-size:11px;color:#777;margin-top:4px">Thank you for dining with us!</div>
+  `;
+}
+
+function printReceipt(){
+  const rec=lastReceiptRec;
+  if(!rec)return;
+  doPrint(`<div style="font-family:Courier New,monospace;font-size:12px;max-width:300px;margin:0 auto;color:#000">${buildReceiptHTML(rec)}</div>`);
+}
+
+function reprintReceipt(histIdx){
+  const rec=orderHistory[histIdx];
+  if(!rec)return;
+  showReceipt(rec);
+}
+
+// ═══════════════════════════════════════════════
+//  ORDER HISTORY
+// ═══════════════════════════════════════════════
+function renderHistory(){
+  const wrap=document.getElementById('history-table-wrap');
+  let orders=historyFilter==='all'?orderHistory:orderHistory.filter(r=>r.payMethod===historyFilter);
+  if(!orders.length){
+    wrap.innerHTML='<div style="color:var(--text2);padding:20px 0;font-size:13px">No orders yet.</div>';
+    return;
+  }
+  const c=S.currencySymbol;
+  let html=`<table class="htable"><thead><tr>
+    <th>#</th><th>Table</th><th>Waiter</th><th>Date/Time</th>
+    <th>Items</th><th>Total</th><th>Payment</th><th>Action</th>
+  </tr></thead><tbody>`;
+  [...orders].reverse().forEach((rec,i)=>{
+    const dt=new Date(rec.datetime);
+    const dtStr=dt.toLocaleDateString()+' '+dt.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit'});
+    const itemCount=rec.orders.reduce((s,o)=>s+o.items.reduce((a,it)=>a+it.qty,0),0);
+    const chipClass=rec.payMethod;
+    const payLabel=rec.payMethod.charAt(0).toUpperCase()+rec.payMethod.slice(1);
+    const histIdx=orderHistory.indexOf(rec);
+    html+=`<tr>
+      <td style="color:var(--text2)">${orders.length-i}</td>
+      <td>Table ${rec.tableNumber}</td>
+      <td>${esc(rec.waiter||'—')}</td>
+      <td style="font-size:12px">${dtStr}</td>
+      <td>${itemCount} items</td>
+      <td style="font-weight:600;color:var(--amber)">${c}${rec.agg.total.toFixed(2)}</td>
+      <td><span class="pay-chip ${chipClass}">${payLabel}</span></td>
+      <td><button class="btn btn-sm btn-secondary" onclick="reprintReceipt(${histIdx})">🖨 Receipt</button></td>
+    </tr>`;
+  });
+  html+='</tbody></table>';
+  wrap.innerHTML=html;
+}
+
+function filterHistory(method,btn){
+  historyFilter=method;
+  document.querySelectorAll('.history-filter-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderHistory();
+}
+
+// ═══════════════════════════════════════════════
+//  DAILY SUMMARY
+// ═══════════════════════════════════════════════
+function renderSummary(){
+  const c=S.currencySymbol;
+  const today=new Date().toDateString();
+  const todayOrders=orderHistory.filter(r=>new Date(r.datetime).toDateString()===today);
+
+  const totalRev=todayOrders.reduce((s,r)=>s+r.agg.total,0);
+  const orderCount=todayOrders.length;
+  const avg=orderCount?totalRev/orderCount:0;
+
+  const byMethod={cash:0,card:0,upi:0,split:0};
+  todayOrders.forEach(r=>{
+    byMethod[r.payMethod]=(byMethod[r.payMethod]||0)+r.agg.total;
+  });
+
+  document.getElementById('sum-cards').innerHTML=`
+    <div class="sum-card">
+      <div class="sum-card-label">Total Revenue</div>
+      <div class="sum-card-val">${c}${totalRev.toFixed(2)}</div>
+      <div class="sum-card-sub">Today</div>
+    </div>
+    <div class="sum-card">
+      <div class="sum-card-label">Orders</div>
+      <div class="sum-card-val">${orderCount}</div>
+      <div class="sum-card-sub">Completed today</div>
+    </div>
+    <div class="sum-card">
+      <div class="sum-card-label">Avg Order Value</div>
+      <div class="sum-card-val">${c}${avg.toFixed(2)}</div>
+      <div class="sum-card-sub">Per order</div>
+    </div>
+    <div class="sum-card">
+      <div class="sum-card-label">Tables Served</div>
+      <div class="sum-card-val">${new Set(todayOrders.map(r=>r.tableNumber)).size}</div>
+      <div class="sum-card-sub">Unique tables</div>
+    </div>
+  `;
+
+  const colors={cash:'var(--green)',card:'var(--blue)',upi:'var(--purple)',split:'var(--amber)'};
+  const methods=['cash','card','upi','split'];
+  const labels={cash:'Cash',card:'Card',upi:'UPI',split:'Split'};
+  let bdHTML='<div class="pay-bd-title">Revenue by Payment Method</div>';
+  methods.forEach(m=>{
+    const val=byMethod[m]||0;
+    const pct=totalRev>0?(val/totalRev*100):0;
+    bdHTML+=`<div class="pay-bd-row">
+      <span style="width:50px">${labels[m]}</span>
+      <div class="pay-bd-bar-wrap"><div class="pay-bd-bar" style="width:${pct}%;background:${colors[m]}"></div></div>
+      <span style="min-width:80px;text-align:right">${c}${val.toFixed(2)}</span>
+      <span style="min-width:40px;text-align:right;color:var(--text2);font-size:12px">${pct.toFixed(0)}%</span>
+    </div>`;
+  });
+  document.getElementById('pay-breakdown').innerHTML=bdHTML;
+}
+
+// ═══════════════════════════════════════════════
+//  SETTINGS
+// ═══════════════════════════════════════════════
+function renderSettings(){
+  document.getElementById('settings-form').innerHTML=`
+    <div class="form-group">
+      <label class="form-label">Restaurant Name</label>
+      <input class="form-input" id="s-name" value="${esc(S.restaurantName)}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Cashier Name</label>
+      <input class="form-input" id="s-cashier" value="${esc(S.cashierName)}">
+    </div>
+    <div class="form-group" style="grid-column:1/-1">
+      <label class="form-label">Address</label>
+      <input class="form-input" id="s-addr" value="${esc(S.address)}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Tax ID / GSTIN</label>
+      <input class="form-input" id="s-taxid" value="${esc(S.taxId)}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Currency Symbol</label>
+      <input class="form-input" id="s-currency" value="${esc(S.currencySymbol)}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Default Tax Rate (%)</label>
+      <input class="form-input" id="s-taxrate" type="number" min="0" max="100" step="0.1" value="${S.taxRate}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Service Charge Rate (%)</label>
+      <input class="form-input" id="s-scrate" type="number" min="0" max="100" step="0.1" value="${S.serviceChargeRate}">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Shift</label>
+      <input class="form-input" id="s-shift" value="${esc(S.shift)}">
+    </div>
+    <div style="grid-column:1/-1;display:flex;flex-direction:column;gap:10px">
+      <div class="toggle-row">
+        <span class="toggle-label">Enable Tips</span>
+        <div class="tswitch ${S.tipEnabled?'on':''}" onclick="this.classList.toggle('on')" id="s-tip-toggle"></div>
+      </div>
+      <div class="toggle-row">
+        <span class="toggle-label">Enable Service Charge</span>
+        <div class="tswitch ${S.serviceChargeEnabled?'on':''}" onclick="this.classList.toggle('on')" id="s-sc-toggle"></div>
+      </div>
+    </div>
+  `;
+}
+
+function saveSettings(){
+  S.restaurantName=document.getElementById('s-name').value.trim()||S.restaurantName;
+  S.cashierName=document.getElementById('s-cashier').value.trim()||S.cashierName;
+  S.address=document.getElementById('s-addr').value.trim();
+  S.taxId=document.getElementById('s-taxid').value.trim();
+  S.currencySymbol=document.getElementById('s-currency').value.trim()||'₹';
+  S.taxRate=parseFloat(document.getElementById('s-taxrate').value)||0;
+  S.serviceChargeRate=parseFloat(document.getElementById('s-scrate').value)||0;
+  S.shift=document.getElementById('s-shift').value.trim()||'Morning';
+  S.tipEnabled=document.getElementById('s-tip-toggle').classList.contains('on');
+  S.serviceChargeEnabled=document.getElementById('s-sc-toggle').classList.contains('on');
+
+  document.getElementById('rest-name-display').textContent=S.restaurantName;
+  document.getElementById('cashier-name-display').textContent=S.cashierName;
+  save();
+  renderFloor();
+  notify('Settings saved!','success');
+}
+
+// ═══════════════════════════════════════════════
+//  UTILS
+// ═══════════════════════════════════════════════
+function esc(s){
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+function closeModal(id){
+  document.getElementById(id).classList.add('hidden');
+}
+
+function notify(msg,type='info'){
+  const el=document.getElementById('notif');
+  el.textContent=msg;
+  el.className='show '+type;
+  el.style.display='block';
+  clearTimeout(el._t);
+  el._t=setTimeout(()=>{el.style.display='none';},2800);
+}
+
+// ═══════════════════════════════════════════════
+//  WAITER ASSIGN
+// ═══════════════════════════════════════════════
+function ctxAssignWaiter(){
+  const t=getTable(ctxTableId);
+  if(!t)return;
+  document.getElementById('waiter-assign-input').value=t.waiter||'';
+  document.getElementById('waiter-overlay').classList.remove('hidden');
+}
+
+function confirmWaiterAssign(){
+  const t=getTable(ctxTableId);
+  if(!t)return;
+  const name=document.getElementById('waiter-assign-input').value.trim();
+  t.waiter=name;
+  if(ctxTableId===selectedTableId)document.getElementById('op-waiter-input').value=name;
+  save();renderFloor();
+  closeModal('waiter-overlay');
+  notify(`Waiter "${name||'—'}" assigned to Table ${t.number}`,'success');
+}
+
+// ═══════════════════════════════════════════════
+//  MENU MANAGEMENT
+// ═══════════════════════════════════════════════
+let mgmtCatFilter='All';
+
+function renderManage(){
+  renderMgmtCatList();
+  renderMgmtCatFilter();
+  renderMgmtItems();
+}
+
+function renderMgmtCatList(){
+  const el=document.getElementById('mgmt-cats');
+  if(!el)return;
+  el.innerHTML='';
+  menuCategories.forEach((c,idx)=>{
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;justify-content:space-between;padding:6px 10px;background:var(--bg3);border-radius:6px;margin-bottom:6px';
+    const span=document.createElement('span');
+    span.style.cssText='font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap';
+    span.textContent=c;
+    const btn=document.createElement('button');
+    btn.className='btn btn-sm btn-danger';
+    btn.textContent='×';
+    btn.style.cssText='flex-shrink:0;margin-left:6px;padding:2px 7px;font-size:13px';
+    btn.onclick=()=>deleteCategory(idx);
+    row.appendChild(span);
+    row.appendChild(btn);
+    el.appendChild(row);
+  });
+}
+
+function renderMgmtCatFilter(){
+  const el=document.getElementById('mgmt-cat-filter');
+  if(!el)return;
+  el.innerHTML='';
+  ['All',...menuCategories].forEach(c=>{
+    const btn=document.createElement('button');
+    btn.className='cat-btn'+(mgmtCatFilter===c?' active':'');
+    btn.textContent=c;
+    btn.onclick=()=>{mgmtCatFilter=c;renderMgmtCatFilter();renderMgmtItems();};
+    el.appendChild(btn);
+  });
+}
+
+function renderMgmtItems(){
+  const el=document.getElementById('mgmt-items-list');
+  if(!el)return;
+  const filtered=mgmtCatFilter==='All'?menuItems:menuItems.filter(it=>it.cat===mgmtCatFilter);
+  if(!filtered.length){
+    el.innerHTML='<div style="color:var(--text2);font-size:13px;padding:12px 0">No items. Click "+ Add Item" to create one.</div>';
+    return;
+  }
+  const c=S.currencySymbol;
+  el.innerHTML='';
+  filtered.forEach(it=>{
+    const row=document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--bg3);border-radius:8px;margin-bottom:6px';
+    const dot=document.createElement('div');
+    dot.className='veg-dot '+(it.veg?'veg':'nveg');
+    dot.style.flexShrink='0';
+    const info=document.createElement('div');
+    info.style.cssText='flex:1;min-width:0';
+    info.innerHTML=`<div style="font-size:13px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(it.name)}</div><div style="font-size:11px;color:var(--text2)">${esc(it.cat)} · ${it.avail?'<span style="color:var(--green)">Available</span>':'<span style="color:var(--red)">Unavailable</span>'}</div>`;
+    const price=document.createElement('div');
+    price.style.cssText='font-weight:600;color:var(--amber);font-size:13px;flex-shrink:0';
+    price.textContent=`${c}${it.price.toFixed(2)}`;
+    const editBtn=document.createElement('button');
+    editBtn.className='btn btn-sm btn-secondary';
+    editBtn.textContent='✏️';
+    editBtn.onclick=()=>openItemModal(it.id);
+    const delBtn=document.createElement('button');
+    delBtn.className='btn btn-sm btn-danger';
+    delBtn.textContent='×';
+    delBtn.style.cssText='padding:3px 8px;font-size:14px';
+    delBtn.onclick=()=>deleteItem(it.id);
+    row.appendChild(dot);row.appendChild(info);row.appendChild(price);row.appendChild(editBtn);row.appendChild(delBtn);
+    el.appendChild(row);
+  });
+}
+
+function addCategory(){
+  const input=document.getElementById('mgmt-new-cat');
+  const name=(input.value||'').trim();
+  if(!name){notify('Enter a category name','error');return;}
+  if(menuCategories.includes(name)){notify('Category already exists','error');return;}
+  menuCategories.push(name);
+  input.value='';
+  save();renderManage();renderMenu();
+  notify(`Category "${name}" added`,'success');
+}
+
+function deleteCategory(idx){
+  const name=menuCategories[idx];
+  if(name===undefined)return;
+  if(!confirm(`Delete category "${name}"? Its items will move to "${menuCategories.filter(c=>c!==name)[0]||'General'}".`))return;
+  menuCategories.splice(idx,1);
+  if(!menuCategories.length)menuCategories=['General'];
+  menuItems.forEach(it=>{if(it.cat===name)it.cat=menuCategories[0];});
+  if(mgmtCatFilter===name)mgmtCatFilter='All';
+  save();renderManage();renderMenu();
+  notify(`"${name}" deleted`,'success');
+}
+
+function openItemModal(id){
+  const catSel=document.getElementById('ie-cat');
+  catSel.innerHTML=menuCategories.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+  if(id){
+    const it=menuItems.find(m=>m.id===id);
+    if(!it)return;
+    document.getElementById('item-edit-title').textContent='Edit Item';
+    document.getElementById('ie-id').value=it.id;
+    document.getElementById('ie-name').value=it.name;
+    document.getElementById('ie-desc').value=it.desc||'';
+    document.getElementById('ie-price').value=it.price;
+    catSel.value=it.cat;
+    document.getElementById('ie-veg').value=it.veg?'1':'0';
+  } else {
+    document.getElementById('item-edit-title').textContent='Add Item';
+    document.getElementById('ie-id').value='';
+    document.getElementById('ie-name').value='';
+    document.getElementById('ie-desc').value='';
+    document.getElementById('ie-price').value='';
+    catSel.value=menuCategories[0]||'General';
+    document.getElementById('ie-veg').value='1';
+  }
+  document.getElementById('item-edit-overlay').classList.remove('hidden');
+}
+
+function saveItem(){
+  const name=(document.getElementById('ie-name').value||'').trim();
+  if(!name){notify('Item name is required','error');return;}
+  const price=parseFloat(document.getElementById('ie-price').value);
+  if(isNaN(price)||price<0){notify('Enter a valid price','error');return;}
+  const desc=(document.getElementById('ie-desc').value||'').trim();
+  const cat=document.getElementById('ie-cat').value;
+  const veg=document.getElementById('ie-veg').value==='1';
+  const existId=document.getElementById('ie-id').value;
+  if(existId){
+    const it=menuItems.find(m=>m.id===existId);
+    if(it){it.name=name;it.desc=desc;it.price=price;it.cat=cat;it.veg=veg;}
+    notify(`"${name}" updated`,'success');
+  } else {
+    menuItems.push({id:'i_'+Date.now(),name,desc,price,cat,veg,avail:true});
+    notify(`"${name}" added to menu`,'success');
+  }
+  save();closeModal('item-edit-overlay');renderManage();renderMenu();
+}
+
+function deleteItem(id){
+  const it=menuItems.find(m=>m.id===id);
+  if(!it)return;
+  if(!confirm(`Delete "${it.name}" from the menu?`))return;
+  menuItems=menuItems.filter(m=>m.id!==id);
+  save();renderManage();renderMenu();
+  notify(`"${it.name}" removed`,'success');
+}
+
+function doPrint(html){
+  const pa=document.getElementById('print-area');
+  pa.innerHTML=html;
+  window.print();
+  setTimeout(()=>{pa.innerHTML='';},1000);
+}
+
+// ═══════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════
+function init(){
+  load();
+  document.getElementById('rest-name-display').textContent=S.restaurantName;
+  document.getElementById('cashier-name-display').textContent=S.cashierName;
+  renderFloor();
+  renderMenu();
+  renderOrderPanel();
+  updateClock();
+  setInterval(updateClock,1000);
+  setInterval(()=>{save();},30000);
+}
+
+init();
+</script>
+</body>
+</html>
