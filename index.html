@@ -440,6 +440,27 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 /* Divider */
 .section-title{font-size:14px;font-weight:600;color:var(--text2);margin-bottom:12px;text-transform:uppercase;letter-spacing:0.5px}
 .divider{border:none;border-top:1px solid var(--border);margin:14px 0}
+
+/* AUTH SCREEN */
+.auth-screen{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;align-items:center;justify-content:center}
+.auth-screen.hidden{display:none}
+.auth-modal{background:var(--bg2);border:1px solid var(--border2);border-radius:20px;padding:36px 32px;width:380px;max-width:calc(100vw - 32px);box-shadow:0 20px 60px rgba(0,0,0,0.6);text-align:center}
+.auth-logo{font-size:44px;margin-bottom:10px}
+.auth-title{font-size:22px;font-weight:700;color:var(--amber);margin:0 0 4px}
+.auth-sub{font-size:13px;color:var(--text2);margin:0 0 22px}
+.auth-tabs{display:flex;margin-bottom:20px;border:1px solid var(--border2);border-radius:var(--radius-sm);overflow:hidden}
+.auth-tab{flex:1;padding:9px;background:none;border:none;color:var(--text2);font-size:13px;font-weight:500;cursor:pointer;transition:all 0.2s}
+.auth-tab.active{background:var(--amber);color:#000;font-weight:600}
+.auth-field{text-align:left;margin-bottom:12px}
+.auth-field label{display:block;font-size:12px;color:var(--text2);margin-bottom:4px;font-weight:500}
+.auth-submit{width:100%;padding:11px;font-size:14px;margin-top:4px;justify-content:center}
+.auth-msg{margin-top:14px;padding:10px 14px;border-radius:var(--radius-sm);font-size:13px;text-align:left;display:none}
+.auth-msg.error{background:rgba(255,59,48,0.15);color:var(--red);border:1px solid rgba(255,59,48,0.3)}
+.auth-msg.success{background:rgba(52,199,89,0.15);color:var(--green);border:1px solid rgba(52,199,89,0.3)}
+.auth-divider{border:none;border-top:1px solid var(--border);margin:16px 0}
+/* Top bar user chip */
+#user-display{display:none;align-items:center;gap:8px}
+#user-email-display{font-size:11px;color:var(--text2);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -452,10 +473,50 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
   </div>
   <div class="tb-right">
     <div id="cashier-display">Cashier: <span id="cashier-name-display">Admin</span></div>
+    <div id="user-display">
+      <span id="user-email-display"></span>
+      <button class="btn btn-sm btn-secondary" onclick="signOut()">Sign Out</button>
+    </div>
     <div id="clock-wrap">
       <div id="clock-time">00:00:00</div>
       <div id="clock-date">—</div>
     </div>
+  </div>
+</div>
+
+<!-- AUTH SCREEN -->
+<div id="auth-screen" class="auth-screen">
+  <div class="auth-modal">
+    <div class="auth-logo">🍽</div>
+    <h1 class="auth-title">Restaurant POS</h1>
+    <p class="auth-sub">Sign in to your account</p>
+    <div class="auth-tabs">
+      <button class="auth-tab active" id="tab-signin" onclick="authTab('signin')">Sign In</button>
+      <button class="auth-tab" id="tab-signup" onclick="authTab('signup')">Sign Up</button>
+    </div>
+    <div id="auth-signin-form">
+      <div class="auth-field">
+        <label>Email</label>
+        <input class="form-input" type="email" id="auth-email" placeholder="you@example.com" onkeydown="if(event.key==='Enter')signIn()">
+      </div>
+      <div class="auth-field">
+        <label>Password</label>
+        <input class="form-input" type="password" id="auth-password" placeholder="••••••••" onkeydown="if(event.key==='Enter')signIn()">
+      </div>
+      <button class="btn btn-primary auth-submit" id="btn-signin" onclick="signIn()">Sign In</button>
+    </div>
+    <div id="auth-signup-form" style="display:none">
+      <div class="auth-field">
+        <label>Email</label>
+        <input class="form-input" type="email" id="signup-email" placeholder="you@example.com" onkeydown="if(event.key==='Enter')signUp()">
+      </div>
+      <div class="auth-field">
+        <label>Password</label>
+        <input class="form-input" type="password" id="signup-password" placeholder="Min. 6 characters" onkeydown="if(event.key==='Enter')signUp()">
+      </div>
+      <button class="btn btn-primary auth-submit" id="btn-signup" onclick="signUp()">Create Account</button>
+    </div>
+    <div id="auth-msg" class="auth-msg"></div>
   </div>
 </div>
 
@@ -717,6 +778,75 @@ body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSy
 <!-- NOTIFICATION -->
 <div id="notif"></div>
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+// ═══════════════════════════════════════════════
+//  SUPABASE
+// ═══════════════════════════════════════════════
+const _sb = supabase.createClient(
+  'https://gurskthkonthamwohpop.supabase.co',
+  'sb_publishable__MJlAoxnhUPbCdc6R9xBvg_fNgIMeyv'
+);
+let sbSession = null;
+
+function authTab(tab){
+  document.getElementById('tab-signin').classList.toggle('active',tab==='signin');
+  document.getElementById('tab-signup').classList.toggle('active',tab==='signup');
+  document.getElementById('auth-signin-form').style.display=tab==='signin'?'block':'none';
+  document.getElementById('auth-signup-form').style.display=tab==='signup'?'block':'none';
+  const m=document.getElementById('auth-msg');m.className='auth-msg';m.style.display='none';
+}
+
+function showAuthMsg(msg,type='error'){
+  const el=document.getElementById('auth-msg');
+  el.textContent=msg;el.className='auth-msg '+type;el.style.display='block';
+}
+
+async function signIn(){
+  const email=(document.getElementById('auth-email').value||'').trim();
+  const password=document.getElementById('auth-password').value;
+  if(!email||!password){showAuthMsg('Enter your email and password.');return;}
+  const btn=document.getElementById('btn-signin');
+  btn.disabled=true;btn.textContent='Signing in…';
+  const {error}=await _sb.auth.signInWithPassword({email,password});
+  btn.disabled=false;btn.textContent='Sign In';
+  if(error)showAuthMsg(error.message);
+}
+
+async function signUp(){
+  const email=(document.getElementById('signup-email').value||'').trim();
+  const password=document.getElementById('signup-password').value;
+  if(!email||!password){showAuthMsg('Enter your email and password.');return;}
+  if(password.length<6){showAuthMsg('Password must be at least 6 characters.');return;}
+  const btn=document.getElementById('btn-signup');
+  btn.disabled=true;btn.textContent='Creating account…';
+  const {error}=await _sb.auth.signUp({email,password});
+  btn.disabled=false;btn.textContent='Create Account';
+  if(error)showAuthMsg(error.message);
+  else showAuthMsg('Account created! You can now sign in.','success');
+}
+
+async function signOut(){
+  await _sb.auth.signOut();
+  sbSession=null;
+  tables=buildFloorPlan();orderHistory=[];selectedTableId=null;
+  document.getElementById('user-display').style.display='none';
+  document.getElementById('auth-screen').classList.remove('hidden');
+  notify('Signed out','success');
+}
+
+async function syncToSupabase(){
+  if(!sbSession)return;
+  try{
+    await _sb.from('pos_data').upsert([
+      {key:'settings',value:S,updated_at:new Date().toISOString()},
+      {key:'tables',value:tables.map(t=>({id:t.id,status:t.status,waiter:t.waiter,orders:t.orders})),updated_at:new Date().toISOString()},
+      {key:'menu',value:{cats:menuCategories,items:menuItems},updated_at:new Date().toISOString()},
+    ]);
+  }catch(e){console.error('Supabase sync:',e);}
+}
+
+</script>
 <script>
 // ═══════════════════════════════════════════════
 //  STATE
@@ -845,9 +975,38 @@ function save(){
     localStorage.setItem('pos_menu',JSON.stringify({cats:menuCategories,items:menuItems}));
     localStorage.setItem('pos_history',JSON.stringify(orderHistory));
   }catch(e){}
+  syncToSupabase();
 }
 
-function load(){
+async function load(){
+  // Try Supabase first
+  if(sbSession){
+    try{
+      const {data,error}=await _sb.from('pos_data').select('key,value');
+      if(!error&&data){
+        const map={};
+        data.forEach(r=>{map[r.key]=r.value;});
+        if(map.settings)Object.assign(S,map.settings);
+        if(map.menu){
+          if(map.menu.cats)menuCategories=map.menu.cats;
+          if(map.menu.items)menuItems=map.menu.items;
+        } else {
+          menuCategories=defaultMenuCategories();menuItems=defaultMenuItems();
+        }
+        if(map.tables){
+          tables=buildFloorPlan();
+          map.tables.forEach(sv=>{
+            const t=tables.find(t=>t.id===sv.id);
+            if(t){t.status=sv.status;t.waiter=sv.waiter;t.orders=sv.orders;}
+          });
+        } else {
+          tables=buildFloorPlan();
+        }
+        return;
+      }
+    }catch(e){console.error('Supabase load:',e);}
+  }
+  // Fall back to localStorage
   try{
     const ss=localStorage.getItem('pos_settings');
     if(ss)Object.assign(S,JSON.parse(ss));
@@ -1571,6 +1730,7 @@ function confirmCheckout(){
     currency:S.currencySymbol
   };
   orderHistory.push(rec);
+  if(sbSession)_sb.from('pos_history').insert({id:rec.id,data:rec,created_at:rec.datetime}).catch(console.error);
 
   // Free table
   t.status='available';
@@ -1676,7 +1836,13 @@ function reprintReceipt(histIdx){
 // ═══════════════════════════════════════════════
 //  ORDER HISTORY
 // ═══════════════════════════════════════════════
-function renderHistory(){
+async function renderHistory(){
+  if(sbSession){
+    try{
+      const {data,error}=await _sb.from('pos_history').select('data').order('created_at',{ascending:false}).limit(500);
+      if(!error&&data)orderHistory=data.map(r=>r.data);
+    }catch(e){console.error('History fetch:',e);}
+  }
   const wrap=document.getElementById('history-table-wrap');
   let orders=historyFilter==='all'?orderHistory:orderHistory.filter(r=>r.payMethod===historyFilter);
   if(!orders.length){
@@ -2052,16 +2218,41 @@ function doPrint(html){
 // ═══════════════════════════════════════════════
 //  INIT
 // ═══════════════════════════════════════════════
-function init(){
-  load();
+function startApp(){
   document.getElementById('rest-name-display').textContent=S.restaurantName;
   document.getElementById('cashier-name-display').textContent=S.cashierName;
   renderFloor();
   renderMenu();
   renderOrderPanel();
+  setInterval(()=>{save();},30000);
+}
+
+async function init(){
   updateClock();
   setInterval(updateClock,1000);
-  setInterval(()=>{save();},30000);
+
+  const {data:{session}}=await _sb.auth.getSession();
+  if(session){
+    sbSession=session;
+    await load();
+    document.getElementById('user-email-display').textContent=session.user.email;
+    document.getElementById('user-display').style.display='flex';
+    document.getElementById('auth-screen').classList.add('hidden');
+    startApp();
+  }
+
+  _sb.auth.onAuthStateChange(async(event,session)=>{
+    sbSession=session;
+    if(event==='SIGNED_IN'){
+      await load();
+      document.getElementById('user-email-display').textContent=session.user.email;
+      document.getElementById('user-display').style.display='flex';
+      document.getElementById('auth-screen').classList.add('hidden');
+      startApp();
+    } else if(event==='SIGNED_OUT'){
+      document.getElementById('auth-screen').classList.remove('hidden');
+    }
+  });
 }
 
 init();
